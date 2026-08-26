@@ -26,7 +26,7 @@ from .distill.extract import DEFAULT_MAX_LINES, DEFAULT_TAIL_LINES, DEFAULT_THRE
 from .errors import DiagnosisError, GitLabError, PipelinemdError, UsageError
 from .gitlab import GitLabClient, Target, parse_target, rebase, target_from_parts
 from .models import JobRef, Report
-from .render import make_style, render_markdown, render_terminal
+from .render import ColorChoice, make_style, render_markdown, render_terminal
 from .render.json_out import report_to_dict
 from .rules import ALL_RULES, get_rule, match_rules
 
@@ -230,7 +230,10 @@ def _render(
             for report in reports
         )
     else:
-        style = make_style(args.color, stdout if not args.output else None)
+        # Writing to a file: "auto" must mean no colour. Deciding from
+        # sys.stdout's tty-ness would embed escape codes in the file.
+        choice: ColorChoice = "never" if (args.output and args.color == "auto") else args.color
+        style = make_style(choice, stdout)
         text = "\n".join(
             render_terminal(
                 report,

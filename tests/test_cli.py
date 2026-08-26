@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import sys
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -67,6 +68,30 @@ def test_distill_writes_to_a_file(tmp_path: Path) -> None:
     assert code == EXIT_OK
     assert out == "", "output went to the file, not stdout"
     assert "npm.eresolve" in target.read_text()
+
+
+class _Tty(io.StringIO):
+    """Stands in for an interactive stdout."""
+
+    def isatty(self) -> bool:
+        return True
+
+
+def test_output_to_a_file_is_never_colourised(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A file is not a terminal, even when the process's own stdout is one."""
+    monkeypatch.setattr(sys, "stdout", _Tty())
+    target = tmp_path / "report.txt"
+    code, _out, _err = run("distill", str(TRACES / "npm_eresolve.log"), "-o", str(target))
+    assert code == EXIT_OK
+    assert "\x1b" not in target.read_text(), "escape codes leaked into the file"
+
+
+def test_explicit_color_always_still_reaches_a_file(tmp_path: Path) -> None:
+    target = tmp_path / "report.txt"
+    run("distill", str(TRACES / "npm_eresolve.log"), "--color", "always", "-o", str(target))
+    assert "\x1b" in target.read_text()
 
 
 def test_distill_missing_file_is_a_usage_error() -> None:
