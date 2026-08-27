@@ -65,3 +65,9 @@ ignore = ["E501", "RUF001", "RUF002", "RUF003"]
 python_version = "3.11"
 strict = true
 files = ["src/pipelinemd"]
+
+# `anthropic` is an optional extra: the core must type-check without it
+# installed, and gets checked properly when it is.
+[[tool.mypy.overrides]]
+module = ["anthropic", "anthropic.*"]
+ignore_missing_imports = true
