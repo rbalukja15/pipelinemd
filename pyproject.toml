@@ -37,6 +37,9 @@ dev = [
     "mypy>=1.11",
 ]
 
+[project.scripts]
+pipelinemd = "pipelinemd.cli:main"
+
 [project.urls]
 Homepage = "https://github.com/rbalukja15/pipelinemd"
 Source = "https://github.com/rbalukja15/pipelinemd"
