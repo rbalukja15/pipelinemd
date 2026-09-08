@@ -1,0 +1,43 @@
+[0KRunning with gitlab-runner 16.9.1 (dcfb4b66)[0;m
+[0;m  on blue-3.shared-gitlab-org ntHFEtyX, system ID: s_1234[0;m
+section_start:1700000000:resolve_secrets[collapsed=true][0K[36;1mResolving secrets[0;m
+section_end:1700000001:resolve_secrets[0K
+section_start:1700000001:prepare_executor[collapsed=true][0K[36;1mPreparing the "docker+machine" executor[0;m
+[0;m Using Docker executor with image python:3.12-slim ...[0;m
+[0;m Pulling docker image python:3.12-slim ...[0;m
+[0;m Using docker image sha256:aa11bb22cc33 for python:3.12-slim with digest python:3.12-slim@sha256:deadbeef ...[0;m
+section_end:1700000014:prepare_executor[0K
+section_start:1700000014:prepare_script[collapsed=true][0K[36;1mPreparing environment[0;m
+Running on runner-nthfetyx-project-42-concurrent-0 via runner-nthfetyx-shared-1...
+section_end:1700000016:prepare_script[0K
+section_start:1700000016:get_sources[collapsed=true][0K[36;1mGetting source from Git repository[0;m
+[32;1m$ eval "$CI_PRE_CLONE_SCRIPT"[0;m
+[32;1mFetching changes with git depth set to 20...[0;m
+Reinitialized existing Git repository in /builds/acme/web/.git/
+[32;1mChecking out 3f2a1b9c as detached HEAD (ref is main)...[0;m
+[32;1mSkipping Git submodules setup[0;m
+section_end:1700000022:get_sources[0K
+section_start:1700000022:step_script[0K[36;1mExecuting "step_script" stage of the job script[0;m
+[32;1m$ pip install -q -r requirements.txt[0;m
+[32;1m$ pytest -q --cov=app[0;m
+..........F.....F..................                                      [100%]
+=================================== FAILURES ===================================
+_____________________________ test_invoice_totals ______________________________
+
+    def test_invoice_totals():
+        invoice = Invoice(items=[Item(price=Decimal('10.00'), qty=3)])
+>       assert invoice.total() == Decimal('30.00')
+E       AssertionError: assert Decimal('30.0000') == Decimal('30.00')
+
+tests/test_invoice.py:44: AssertionError
+_____________________________ test_tax_rounding ________________________________
+E       assert 19.99 == 20.0
+tests/test_tax.py:17: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_invoice.py::test_invoice_totals - AssertionError: assert Deci...
+FAILED tests/test_tax.py::test_tax_rounding - assert 19.99 == 20.0
+2 failed, 33 passed, 1 skipped in 12.44s
+section_end:1700000060:step_script[0K
+section_start:1700000061:cleanup_file_variables[collapsed=true][0K[36;1mCleaning up project directory and file based variables[0;m
+section_end:1700000062:cleanup_file_variables[0K
+[31;1mERROR: Job failed: exit code 1[0;m

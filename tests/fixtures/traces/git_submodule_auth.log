@@ -1,0 +1,28 @@
+[0KRunning with gitlab-runner 16.9.1 (dcfb4b66)[0;m
+[0;m  on blue-3.shared-gitlab-org ntHFEtyX, system ID: s_1234[0;m
+section_start:1700000000:resolve_secrets[collapsed=true][0K[36;1mResolving secrets[0;m
+section_end:1700000001:resolve_secrets[0K
+section_start:1700000001:prepare_executor[collapsed=true][0K[36;1mPreparing the "docker+machine" executor[0;m
+[0;m Using Docker executor with image node:20-alpine ...[0;m
+[0;m Pulling docker image node:20-alpine ...[0;m
+[0;m Using docker image sha256:aa11bb22cc33 for node:20-alpine with digest node:20-alpine@sha256:deadbeef ...[0;m
+section_end:1700000014:prepare_executor[0K
+section_start:1700000014:prepare_script[collapsed=true][0K[36;1mPreparing environment[0;m
+Running on runner-nthfetyx-project-42-concurrent-0 via runner-nthfetyx-shared-1...
+section_end:1700000016:prepare_script[0K
+section_start:1700000016:get_sources[collapsed=true][0K[36;1mGetting source from Git repository[0;m
+[32;1m$ eval "$CI_PRE_CLONE_SCRIPT"[0;m
+[32;1mFetching changes with git depth set to 20...[0;m
+Reinitialized existing Git repository in /builds/acme/web/.git/
+[32;1mChecking out 3f2a1b9c as detached HEAD (ref is main)...[0;m
+[32;1mSkipping Git submodules setup[0;m
+[32;1mUpdating/initializing submodules recursively...[0;m
+Submodule 'vendor/shared' (https://gitlab.com/acme/shared.git) registered for path 'vendor/shared'
+Cloning into '/builds/acme/web/vendor/shared'...
+fatal: could not read Username for 'https://gitlab.com': No such device or address
+fatal: clone of 'https://gitlab.com/acme/shared.git' into submodule path '/builds/acme/web/vendor/shared' failed
+Failed to clone 'vendor/shared'. Retry scheduled
+section_end:1700000040:get_sources[0K
+section_start:1700000041:cleanup_file_variables[collapsed=true][0K[36;1mCleaning up project directory and file based variables[0;m
+section_end:1700000042:cleanup_file_variables[0K
+[31;1mERROR: Job failed: exit code 1[0;m

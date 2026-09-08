@@ -1,0 +1,77 @@
+[0KRunning with gitlab-runner 16.9.1 (dcfb4b66)[0;m
+[0;m  on blue-3.shared-gitlab-org ntHFEtyX, system ID: s_1234[0;m
+section_start:1700000000:resolve_secrets[collapsed=true][0K[36;1mResolving secrets[0;m
+section_end:1700000001:resolve_secrets[0K
+section_start:1700000001:prepare_executor[collapsed=true][0K[36;1mPreparing the "docker+machine" executor[0;m
+[0;m Using Docker executor with image node:20-alpine ...[0;m
+[0;m Pulling docker image node:20-alpine ...[0;m
+[0;m Using docker image sha256:aa11bb22cc33 for node:20-alpine with digest node:20-alpine@sha256:deadbeef ...[0;m
+section_end:1700000014:prepare_executor[0K
+section_start:1700000014:prepare_script[collapsed=true][0K[36;1mPreparing environment[0;m
+Running on runner-nthfetyx-project-42-concurrent-0 via runner-nthfetyx-shared-1...
+section_end:1700000016:prepare_script[0K
+section_start:1700000016:get_sources[collapsed=true][0K[36;1mGetting source from Git repository[0;m
+[32;1m$ eval "$CI_PRE_CLONE_SCRIPT"[0;m
+[32;1mFetching changes with git depth set to 20...[0;m
+Reinitialized existing Git repository in /builds/acme/web/.git/
+[32;1mChecking out 3f2a1b9c as detached HEAD (ref is main)...[0;m
+[32;1mSkipping Git submodules setup[0;m
+section_end:1700000022:get_sources[0K
+section_start:1700000022:step_script[0K[36;1mExecuting "step_script" stage of the job script[0;m
+[32;1m$ npm ci --prefer-offline[0;m
+⠹ idealTree:web: sill placeDep node_modules/react 0%⠹ idealTree:web: sill placeDep node_modules/react 1%⠹ idealTree:web: sill placeDep node_modules/react 2%⠹ idealTree:web: sill placeDep node_modules/react 3%⠹ idealTree:web: sill placeDep node_modules/react 5%⠹ idealTree:web: sill placeDep node_modules/react 6%⠹ idealTree:web: sill placeDep node_modules/react 7%⠹ idealTree:web: sill placeDep node_modules/react 8%⠹ idealTree:web: sill placeDep node_modules/react 10%⠹ idealTree:web: sill placeDep node_modules/react 11%⠹ idealTree:web: sill placeDep node_modules/react 12%⠹ idealTree:web: sill placeDep node_modules/react 13%⠹ idealTree:web: sill placeDep node_modules/react 15%⠹ idealTree:web: sill placeDep node_modules/react 16%⠹ idealTree:web: sill placeDep node_modules/react 17%⠹ idealTree:web: sill placeDep node_modules/react 18%⠹ idealTree:web: sill placeDep node_modules/react 20%⠹ idealTree:web: sill placeDep node_modules/react 21%⠹ idealTree:web: sill placeDep node_modules/react 22%⠹ idealTree:web: sill placeDep node_modules/react 23%⠹ idealTree:web: sill placeDep node_modules/react 25%⠹ idealTree:web: sill placeDep node_modules/react 26%⠹ idealTree:web: sill placeDep node_modules/react 27%⠹ idealTree:web: sill placeDep node_modules/react 28%⠹ idealTree:web: sill placeDep node_modules/react 30%⠹ idealTree:web: sill placeDep node_modules/react 31%⠹ idealTree:web: sill placeDep node_modules/react 32%⠹ idealTree:web: sill placeDep node_modules/react 33%⠹ idealTree:web: sill placeDep node_modules/react 35%⠹ idealTree:web: sill placeDep node_modules/react 36%⠹ idealTree:web: sill placeDep node_modules/react 37%⠹ idealTree:web: sill placeDep node_modules/react 38%⠹ idealTree:web: sill placeDep node_modules/react 40%⠹ idealTree:web: sill placeDep node_modules/react 41%⠹ idealTree:web: sill placeDep node_modules/react 42%⠹ idealTree:web: sill placeDep node_modules/react 43%⠹ idealTree:web: sill placeDep node_modules/react 45%⠹ idealTree:web: sill placeDep node_modules/react 46%⠹ idealTree:web: sill placeDep node_modules/react 47%⠹ idealTree:web: sill placeDep node_modules/react 48%⠹ idealTree:web: sill placeDep node_modules/react 50%⠹ idealTree:web: sill placeDep node_modules/react 51%⠹ idealTree:web: sill placeDep node_modules/react 52%⠹ idealTree:web: sill placeDep node_modules/react 53%⠹ idealTree:web: sill placeDep node_modules/react 55%⠹ idealTree:web: sill placeDep node_modules/react 56%⠹ idealTree:web: sill placeDep node_modules/react 57%⠹ idealTree:web: sill placeDep node_modules/react 58%⠹ idealTree:web: sill placeDep node_modules/react 60%⠹ idealTree:web: sill placeDep node_modules/react 61%⠹ idealTree:web: sill placeDep node_modules/react 62%⠹ idealTree:web: sill placeDep node_modules/react 63%⠹ idealTree:web: sill placeDep node_modules/react 65%⠹ idealTree:web: sill placeDep node_modules/react 66%⠹ idealTree:web: sill placeDep node_modules/react 67%⠹ idealTree:web: sill placeDep node_modules/react 68%⠹ idealTree:web: sill placeDep node_modules/react 70%⠹ idealTree:web: sill placeDep node_modules/react 71%⠹ idealTree:web: sill placeDep node_modules/react 72%⠹ idealTree:web: sill placeDep node_modules/react 73%⠹ idealTree:web: sill placeDep node_modules/react 75%⠹ idealTree:web: sill placeDep node_modules/react 76%⠹ idealTree:web: sill placeDep node_modules/react 77%⠹ idealTree:web: sill placeDep node_modules/react 78%⠹ idealTree:web: sill placeDep node_modules/react 80%⠹ idealTree:web: sill placeDep node_modules/react 81%⠹ idealTree:web: sill placeDep node_modules/react 82%⠹ idealTree:web: sill placeDep node_modules/react 83%⠹ idealTree:web: sill placeDep node_modules/react 85%⠹ idealTree:web: sill placeDep node_modules/react 86%⠹ idealTree:web: sill placeDep node_modules/react 87%⠹ idealTree:web: sill placeDep node_modules/react 88%⠹ idealTree:web: sill placeDep node_modules/react 90%⠹ idealTree:web: sill placeDep node_modules/react 91%⠹ idealTree:web: sill placeDep node_modules/react 92%⠹ idealTree:web: sill placeDep node_modules/react 93%⠹ idealTree:web: sill placeDep node_modules/react 95%⠹ idealTree:web: sill placeDep node_modules/react 96%⠹ idealTree:web: sill placeDep node_modules/react 97%⠹ idealTree:web: sill placeDep node_modules/react 98%⠹ idealTree:web: sill placeDep node_modules/react 100%
+npm WARN deprecated inflight@1.0.6: This module is not supported
+npm WARN deprecated inflight@1.0.6: This module is not supported
+npm WARN deprecated inflight@1.0.6: This module is not supported
+npm WARN deprecated inflight@1.0.6: This module is not supported
+npm WARN deprecated inflight@1.0.6: This module is not supported
+npm WARN deprecated inflight@1.0.6: This module is not supported
+npm WARN deprecated inflight@1.0.6: This module is not supported
+npm WARN deprecated inflight@1.0.6: This module is not supported
+npm WARN deprecated inflight@1.0.6: This module is not supported
+npm WARN deprecated inflight@1.0.6: This module is not supported
+npm WARN deprecated inflight@1.0.6: This module is not supported
+npm WARN deprecated inflight@1.0.6: This module is not supported
+npm WARN deprecated inflight@1.0.6: This module is not supported
+npm WARN deprecated inflight@1.0.6: This module is not supported
+npm WARN deprecated inflight@1.0.6: This module is not supported
+npm WARN deprecated inflight@1.0.6: This module is not supported
+npm WARN deprecated inflight@1.0.6: This module is not supported
+npm WARN deprecated inflight@1.0.6: This module is not supported
+npm WARN deprecated inflight@1.0.6: This module is not supported
+npm WARN deprecated inflight@1.0.6: This module is not supported
+npm WARN deprecated inflight@1.0.6: This module is not supported
+npm WARN deprecated inflight@1.0.6: This module is not supported
+npm WARN deprecated inflight@1.0.6: This module is not supported
+npm WARN deprecated inflight@1.0.6: This module is not supported
+npm WARN deprecated inflight@1.0.6: This module is not supported
+npm WARN deprecated inflight@1.0.6: This module is not supported
+npm WARN deprecated inflight@1.0.6: This module is not supported
+npm WARN deprecated inflight@1.0.6: This module is not supported
+npm WARN deprecated inflight@1.0.6: This module is not supported
+npm WARN deprecated inflight@1.0.6: This module is not supported
+npm ERR! code ERESOLVE
+npm ERR! ERESOLVE unable to resolve dependency tree
+npm ERR!
+npm ERR! While resolving: acme-web@2.4.0
+npm ERR! Found: react@17.0.2
+npm ERR! node_modules/react
+npm ERR!   react@"^17.0.2" from the root project
+npm ERR!
+npm ERR! Could not resolve dependency:
+npm ERR! peer react@"^18.0.0" from @acme/design-system@4.1.0
+npm ERR! node_modules/@acme/design-system
+npm ERR!   @acme/design-system@"^4.1.0" from the root project
+npm ERR!
+npm ERR! Fix the upstream dependency conflict, or retry
+npm ERR! this command with --force or --legacy-peer-deps
+npm ERR! A complete log of this run can be found in: /root/.npm/_logs/2026-08-26T09_12_44_101Z-debug-0.log
+section_end:1700000096:step_script[0K
+section_start:1700000096:upload_artifacts_on_failure[collapsed=true][0K[36;1mUploading artifacts for failed job[0;m
+[32;1mUploading artifacts...[0;m
+WARNING: coverage/: no matching files. Ensure that the artifact path is relative to the working directory (/builds/acme/web)
+[31;1mERROR: No files to upload[0;m
+section_end:1700000099:upload_artifacts_on_failure[0K
+section_start:1700000099:cleanup_file_variables[collapsed=true][0K[36;1mCleaning up project directory and file based variables[0;m
+section_end:1700000100:cleanup_file_variables[0K
+[31;1mERROR: Job failed: exit code 1[0;m

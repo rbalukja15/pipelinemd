@@ -1,0 +1,35 @@
+[0KRunning with gitlab-runner 16.9.1 (dcfb4b66)[0;m
+[0;m  on blue-3.shared-gitlab-org ntHFEtyX, system ID: s_1234[0;m
+section_start:1700000000:resolve_secrets[collapsed=true][0K[36;1mResolving secrets[0;m
+section_end:1700000001:resolve_secrets[0K
+section_start:1700000001:prepare_executor[collapsed=true][0K[36;1mPreparing the "docker+machine" executor[0;m
+[0;m Using Docker executor with image node:20-alpine ...[0;m
+[0;m Pulling docker image node:20-alpine ...[0;m
+[0;m Using docker image sha256:aa11bb22cc33 for node:20-alpine with digest node:20-alpine@sha256:deadbeef ...[0;m
+section_end:1700000014:prepare_executor[0K
+section_start:1700000014:prepare_script[collapsed=true][0K[36;1mPreparing environment[0;m
+Running on runner-nthfetyx-project-42-concurrent-0 via runner-nthfetyx-shared-1...
+section_end:1700000016:prepare_script[0K
+section_start:1700000016:get_sources[collapsed=true][0K[36;1mGetting source from Git repository[0;m
+[32;1m$ eval "$CI_PRE_CLONE_SCRIPT"[0;m
+[32;1mFetching changes with git depth set to 20...[0;m
+Reinitialized existing Git repository in /builds/acme/web/.git/
+[32;1mChecking out 3f2a1b9c as detached HEAD (ref is main)...[0;m
+[32;1mSkipping Git submodules setup[0;m
+section_end:1700000022:get_sources[0K
+section_start:1700000022:step_script[0K[36;1mExecuting "step_script" stage of the job script[0;m
+[32;1m$ npm run build[0;m
+> acme-web@2.4.0 build
+> next build
+
+Creating an optimized production build 0%Creating an optimized production build 2%Creating an optimized production build 5%Creating an optimized production build 7%Creating an optimized production build 10%Creating an optimized production build 12%Creating an optimized production build 15%Creating an optimized production build 17%Creating an optimized production build 20%Creating an optimized production build 22%Creating an optimized production build 25%Creating an optimized production build 27%Creating an optimized production build 30%Creating an optimized production build 32%Creating an optimized production build 35%Creating an optimized production build 37%Creating an optimized production build 40%Creating an optimized production build 42%Creating an optimized production build 45%Creating an optimized production build 47%Creating an optimized production build 50%Creating an optimized production build 52%Creating an optimized production build 55%Creating an optimized production build 57%Creating an optimized production build 60%Creating an optimized production build 62%Creating an optimized production build 65%Creating an optimized production build 67%Creating an optimized production build 70%Creating an optimized production build 72%Creating an optimized production build 75%Creating an optimized production build 77%Creating an optimized production build 80%Creating an optimized production build 82%Creating an optimized production build 85%Creating an optimized production build 87%Creating an optimized production build 90%Creating an optimized production build 92%Creating an optimized production build 95%Creating an optimized production build 97%Creating an optimized production build 100%
+<--- Last few GCs --->
+[42:0x5a1c000] 118453 ms: Mark-sweep 4051.2 (4143.5) -> 4050.8 (4144.5) MB, 2851.9 / 0.0 ms
+<--- JS stacktrace --->
+FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory
+ 1: 0xb7a4c0 node::Abort() [node]
+ 2: 0xa8b4f5 node::FatalError(char const*, char const*) [node]
+section_end:1700000200:step_script[0K
+section_start:1700000201:cleanup_file_variables[collapsed=true][0K[36;1mCleaning up project directory and file based variables[0;m
+section_end:1700000202:cleanup_file_variables[0K
+[31;1mERROR: Job failed: exit code 134[0;m
