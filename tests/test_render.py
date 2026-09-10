@@ -8,7 +8,15 @@ from collections.abc import Callable
 import pytest
 
 from pipelinemd.distill import distill
-from pipelinemd.models import Category, Confidence, Diagnosis, Fix, JobRef, Report
+from pipelinemd.models import (
+    Category,
+    Citation,
+    Confidence,
+    Diagnosis,
+    Fix,
+    JobRef,
+    Report,
+)
 from pipelinemd.render import (
     make_style,
     render_json,
@@ -25,9 +33,20 @@ DIAGNOSIS = Diagnosis(
     confidence=Confidence.HIGH,
     category=Category.DEPENDENCY,
     fixes=(Fix(title="Regenerate the lockfile", detail="Run npm install.", patch="npm install"),),
+    citations=(Citation(line_number=142, text="npm ERR! code ERESOLVE", section="step_script"),),
     model="claude-opus-5",
     input_tokens=1200,
     output_tokens=400,
+)
+
+UNGROUNDED = Diagnosis(
+    summary="Something failed",
+    root_cause="Line 41203 shows it.",
+    confidence=Confidence.LOW,
+    category=Category.SCRIPT,
+    citations=(Citation(line_number=142, text="npm ERR! code ERESOLVE"),),
+    unresolved_citations=(41203,),
+    model="claude-opus-5",
 )
 
 
@@ -177,6 +196,66 @@ def test_json_includes_the_diagnosis_when_present(report: Report) -> None:
     assert payload["diagnosis"]["confidence"] == "high"
     assert payload["diagnosis"]["usage"]["input_tokens"] == 1200
     assert payload["diagnosis"]["fixes"][0]["patch"] == "npm install"
+
+
+# -- citations (#16) --------------------------------------------------------
+
+
+def _with(report: Report, diagnosis: Diagnosis) -> Report:
+    return Report(
+        job=report.job,
+        distilled=report.distilled,
+        hits=report.hits,
+        diagnosis=diagnosis,
+    )
+
+
+def test_terminal_shows_cited_evidence(report: Report) -> None:
+    out = render_terminal(_with(report, DIAGNOSIS), Style(enabled=False))
+    assert "Cited evidence" in out
+    assert "L142" in out
+
+
+def test_terminal_marks_cited_lines_in_the_evidence_block(report: Report) -> None:
+    """A reader should be able to find the cited line without counting rows."""
+    out = render_terminal(_with(report, DIAGNOSIS), Style(enabled=False), evidence_limit=200)
+    cited_row = next(
+        line for line in out.splitlines() if line.lstrip("›").strip().startswith("142 ")
+    )
+    assert cited_row.startswith("›")
+
+
+def test_terminal_warns_about_invented_citations(report: Report) -> None:
+    out = render_terminal(_with(report, UNGROUNDED), Style(enabled=False))
+    assert "L41203" in out
+    assert "not in the evidence" in out
+
+
+def test_markdown_shows_cited_evidence(report: Report) -> None:
+    out = render_markdown(_with(report, DIAGNOSIS))
+    assert "**Cited evidence**" in out
+    assert "npm ERR! code ERESOLVE" in out
+
+
+def test_markdown_warns_about_invented_citations(report: Report) -> None:
+    out = render_markdown(_with(report, UNGROUNDED))
+    assert "L41203" in out
+    assert "suspicion" in out
+
+
+def test_json_carries_citations_and_grounding(report: Report) -> None:
+    payload = json.loads(render_json(_with(report, DIAGNOSIS)))["diagnosis"]
+    assert payload["citations"] == [
+        {"line_number": 142, "text": "npm ERR! code ERESOLVE", "section": "step_script"}
+    ]
+    assert payload["unresolved_citations"] == []
+    assert payload["fully_grounded"] is True
+
+
+def test_json_marks_an_ungrounded_diagnosis(report: Report) -> None:
+    payload = json.loads(render_json(_with(report, UNGROUNDED)))["diagnosis"]
+    assert payload["unresolved_citations"] == [41203]
+    assert payload["fully_grounded"] is False
 
 
 def test_json_evidence_keeps_line_numbers(report: Report) -> None:
