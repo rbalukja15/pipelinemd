@@ -16,7 +16,9 @@ pipelinemd does two things about that:
    regions that explain the outcome — then matches them against a catalog of
    **58 known CI failure signatures**, each with a real fix.
 2. **An optional Claude diagnosis** reads only that distilled evidence and
-   names the root cause, separating the actual fault from its fallout.
+   names the root cause, separating the actual fault from its fallout — and
+   must cite the evidence lines it relied on. A diagnosis that cites nothing
+   real is rejected rather than reported.
 
 The first half needs no API key, no model, and **no third-party packages at
 all**. The second is the upgrade.
@@ -184,6 +186,11 @@ For how the pieces fit together, see [docs/architecture.md](docs/architecture.md
 - **The model never sees a raw trace.** It sees distilled, redacted evidence
   plus what the rules already concluded — which keeps requests small and cheap,
   and keeps the model's effort on the judgement call.
+- **A diagnosis must point at something.** Every diagnosis cites line numbers,
+  and every cited number is resolved against the excerpt the model was shown.
+  Cite nothing real and the diagnosis is rejected; cite a mix and the invented
+  numbers are printed alongside it. Confident prose is easy; a claim you can
+  check is the product.
 - **The distiller is pure.** No clock, no network, no randomness.
 
 ## Contributing a rule

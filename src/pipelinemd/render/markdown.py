@@ -47,6 +47,19 @@ def render_markdown(report: Report, *, rule_limit: int = 5, evidence_limit: int 
             "",
             diagnosis.root_cause,
         ]
+        if diagnosis.citations:
+            out += ["", "**Cited evidence**", "", "```log"]
+            out += [
+                f"{citation.line_number:>6}  {citation.text}" for citation in diagnosis.citations
+            ]
+            out += ["```"]
+        if diagnosis.unresolved_citations:
+            invented = ", ".join(f"L{n}" for n in diagnosis.unresolved_citations)
+            out += [
+                "",
+                f"> ⚠️ This diagnosis also cited {invented}, which is not in the "
+                "evidence. Treat the surrounding claim with suspicion.",
+            ]
         if diagnosis.fixes:
             out += ["", "**Suggested fixes**", ""]
             for index, fix in enumerate(diagnosis.fixes, start=1):

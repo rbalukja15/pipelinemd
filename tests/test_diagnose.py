@@ -8,7 +8,12 @@ from typing import Any
 import pytest
 
 from pipelinemd.diagnose import build_user_message, diagnose
-from pipelinemd.diagnose.prompt import DIAGNOSIS_SCHEMA, coerce_category, coerce_confidence
+from pipelinemd.diagnose.prompt import (
+    DIAGNOSIS_SCHEMA,
+    SYSTEM_PROMPT,
+    coerce_category,
+    coerce_confidence,
+)
 from pipelinemd.distill import distill
 from pipelinemd.errors import DiagnosisError
 from pipelinemd.models import Category, Confidence, JobRef
@@ -19,6 +24,7 @@ PAYLOAD = {
     "root_cause": "Line 2 shows ERESOLVE while resolving react.",
     "confidence": "high",
     "category": "dependency",
+    "evidence_lines": [2],
     "fixes": [
         {"title": "Regenerate the lockfile", "detail": "Run npm install.", "patch": "npm install"},
         {"title": "Upgrade the package", "detail": "Bump design-system.", "patch": ""},
@@ -120,6 +126,59 @@ def test_transport_failure_is_wrapped(distilled: Any) -> None:
     client = _Client(error=RuntimeError("connection reset"))
     with pytest.raises(DiagnosisError, match="connection reset"):
         diagnose(JobRef(name="b"), distilled, [], client=client)
+
+
+# -- citation discipline (#16) ---------------------------------------------
+
+
+def test_diagnosis_carries_resolved_citations(distilled: Any) -> None:
+    client = _Client(_Response([_Block("text", json.dumps(PAYLOAD))]))
+    result = diagnose(JobRef(name="build"), distilled, [], client=client)
+
+    assert [c.line_number for c in result.citations] == [2]
+    assert result.citations[0].text == "npm ERR! code ERESOLVE"
+    assert result.unresolved_citations == ()
+    assert result.fully_grounded
+
+
+def test_a_diagnosis_citing_only_invented_lines_is_rejected(distilled: Any) -> None:
+    """A confident paragraph about a line that was never shown is not evidence."""
+    payload = {**PAYLOAD, "evidence_lines": [41203]}
+    client = _Client(_Response([_Block("text", json.dumps(payload))]))
+    with pytest.raises(DiagnosisError, match="41203"):
+        diagnose(JobRef(name="build"), distilled, [], client=client)
+
+
+def test_a_diagnosis_citing_nothing_is_rejected(distilled: Any) -> None:
+    payload = {**PAYLOAD, "evidence_lines": []}
+    client = _Client(_Response([_Block("text", json.dumps(payload))]))
+    with pytest.raises(DiagnosisError, match="nothing at all"):
+        diagnose(JobRef(name="build"), distilled, [], client=client)
+
+
+def test_partly_invented_citations_are_flagged_not_silently_dropped(
+    distilled: Any,
+) -> None:
+    """Half-grounded is still reportable, but it must say so."""
+    payload = {**PAYLOAD, "evidence_lines": [2, 41203]}
+    client = _Client(_Response([_Block("text", json.dumps(payload))]))
+    result = diagnose(JobRef(name="build"), distilled, [], client=client)
+
+    assert [c.line_number for c in result.citations] == [2]
+    assert result.unresolved_citations == (41203,)
+    assert not result.fully_grounded
+
+
+def test_schema_requires_evidence_lines() -> None:
+    assert "evidence_lines" in DIAGNOSIS_SCHEMA["required"]  # type: ignore[operator]
+    field = DIAGNOSIS_SCHEMA["properties"]["evidence_lines"]  # type: ignore[index]
+    assert field["type"] == "array"
+    assert field["items"]["type"] == "integer"
+
+
+def test_prompt_tells_the_model_citations_must_be_real() -> None:
+    assert "evidence_lines" in SYSTEM_PROMPT
+    assert "not in the excerpt" in SYSTEM_PROMPT
 
 
 def test_unknown_enum_values_degrade_safely() -> None:

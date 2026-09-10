@@ -78,6 +78,21 @@ def _diagnosis(report: Report, style: Style, width: int) -> list[str]:
         lines.append("")
         lines.extend(_wrap(diagnosis.root_cause, width, indent="  "))
 
+    if diagnosis.citations:
+        lines += ["", style.heading("Cited evidence")]
+        for citation in diagnosis.citations:
+            number = style.dim(f"L{citation.line_number}".rjust(8))
+            lines.append(f"{number}  {citation.text[: width - 12]}")
+    if diagnosis.unresolved_citations:
+        invented = ", ".join(f"L{n}" for n in diagnosis.unresolved_citations)
+        warning = _wrap(
+            f"⚠ also cited {invented}, which is not in the evidence — treat the "
+            "surrounding claim with suspicion.",
+            width,
+            indent="  ",
+        )
+        lines += ["", *(style.yellow(line) for line in warning)]
+
     if diagnosis.fixes:
         lines += ["", style.heading("Suggested fixes")]
         for index, fix in enumerate(diagnosis.fixes, start=1):
@@ -129,26 +144,48 @@ def _fixes_from_rules(report: Report, style: Style, width: int) -> list[str]:
     return lines
 
 
+def _cited_display_numbers(report: Report) -> frozenset[int]:
+    """Displayed line numbers a citation points at.
+
+    A citation may land inside a collapsed run, whose displayed number is the
+    run's head - so match by range, not equality, or the marker goes missing on
+    exactly the lines that were folded.
+    """
+    diagnosis = report.diagnosis
+    if diagnosis is None or not diagnosis.citations:
+        return frozenset()
+    cited = {citation.line_number for citation in diagnosis.citations}
+    marked: set[int] = set()
+    for block in report.distilled.evidence:
+        for line in block.lines:
+            span = range(line.number, line.number + max(1, line.repeat))
+            if any(number in span for number in cited):
+                marked.add(line.number)
+    return frozenset(marked)
+
+
 def _evidence(report: Report, style: Style, limit: int) -> list[str]:
     distilled = report.distilled
     stats = distilled.stats
     shown, dropped = select_display_lines(distilled, limit)
+    cited = _cited_display_numbers(report)
 
     header = style.heading("Evidence") + style.dim(
         f"   {stats.evidence_lines} of {stats.raw_lines} lines · {stats.reduction:.1%} reduced"
     )
     lines = ["", header]
     if dropped:
-        lines.append(style.dim(f"       showing the {len(shown)} most relevant; {dropped} hidden"))
+        lines.append(style.dim(f"        showing the {len(shown)} most relevant; {dropped} hidden"))
 
     previous: EvidenceLine | None = None
     for line in shown:
         if gap := gap_before(previous, line):
-            lines.append(style.dim(f"       … {gap} lines omitted …"))
+            lines.append(style.dim(f"        … {gap} lines omitted …"))
+        marker = style.cyan("›") if line.number in cited else " "
         number = style.dim(f"{line.number:>6}")
         text = style.red(line.text) if line.is_anchor else line.text
         suffix = style.dim(f"  [x{line.repeat}]") if line.collapsed else ""
-        lines.append(f"{number}  {text}{suffix}")
+        lines.append(f"{marker}{number}  {text}{suffix}")
         previous = line
     return lines
 

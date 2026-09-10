@@ -17,6 +17,7 @@ __version__ = "0.1.0"
 
 from .models import (
     Category,
+    Citation,
     Confidence,
     Diagnosis,
     DistilledLog,
@@ -29,6 +30,7 @@ from .models import (
 
 __all__ = [
     "Category",
+    "Citation",
     "Confidence",
     "Diagnosis",
     "DistilledLog",

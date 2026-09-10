@@ -26,6 +26,11 @@ explains the rest.
 evidence contradicts a rule, say so and explain why. If the rules found \
 nothing, work from the evidence directly.
 - Ground every claim in the excerpt. Refer to line numbers as shown.
+- Cite your evidence. `evidence_lines` must list the line numbers from the \
+excerpt that actually support your conclusion, exactly as printed there. Cite \
+only numbers you can see. A number that is not in the excerpt is not a guess, \
+it is an error - if the excerpt does not support a claim, do not make the \
+claim.
 - Prefer fixes specific to what you can see - the actual package name, the \
 actual command, the actual image - over generic advice.
 - A `patch` is a concrete snippet the user can paste (a .gitlab-ci.yml \
@@ -53,6 +58,15 @@ DIAGNOSIS_SCHEMA: dict[str, object] = {
             ),
         },
         "confidence": {"type": "string", "enum": ["high", "medium", "low"]},
+        "evidence_lines": {
+            "type": "array",
+            "description": (
+                "Line numbers from the distilled evidence that support this "
+                "diagnosis, exactly as printed in the excerpt. One to six "
+                "entries, most important first."
+            ),
+            "items": {"type": "integer"},
+        },
         "category": {
             "type": "string",
             "enum": [category.value for category in Category],
@@ -81,7 +95,14 @@ DIAGNOSIS_SCHEMA: dict[str, object] = {
             },
         },
     },
-    "required": ["summary", "root_cause", "confidence", "category", "fixes"],
+    "required": [
+        "summary",
+        "root_cause",
+        "confidence",
+        "category",
+        "evidence_lines",
+        "fixes",
+    ],
     "additionalProperties": False,
 }
 

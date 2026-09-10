@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any
 
 from ..errors import DiagnosisError
 from ..models import Diagnosis, DistilledLog, Fix, JobRef, RuleHit
+from .citations import coerce_line_numbers, resolve_citations
 from .prompt import (
     DIAGNOSIS_SCHEMA,
     SYSTEM_PROMPT,
@@ -71,7 +72,27 @@ def _extract_json(content: list[Any]) -> dict[str, Any]:
     raise DiagnosisError("Model response contained no text block.")
 
 
-def _to_diagnosis(payload: dict[str, Any], model: str, usage: Any) -> Diagnosis:
+def _to_diagnosis(
+    payload: dict[str, Any], model: str, usage: Any, distilled: DistilledLog
+) -> Diagnosis:
+    """Build a Diagnosis, refusing one that cites nothing real.
+
+    The citation check is the whole point of the discipline: a confident
+    paragraph about line 41203 is worthless if line 41203 was never in the
+    excerpt. A diagnosis whose citations all fail to resolve is describing
+    something the model did not read, so it is rejected rather than reported.
+    """
+    citations, unresolved = resolve_citations(
+        distilled, coerce_line_numbers(payload.get("evidence_lines"))
+    )
+    if not citations:
+        cited = ", ".join(str(n) for n in unresolved) or "nothing at all"
+        raise DiagnosisError(
+            f"Diagnosis rejected: it cited {cited}, and none of that exists in "
+            "the evidence it was given. A diagnosis that cannot point at a real "
+            "line is not grounded in this job's log."
+        )
+
     fixes = []
     for entry in payload.get("fixes") or []:
         if not isinstance(entry, dict):
@@ -90,6 +111,8 @@ def _to_diagnosis(payload: dict[str, Any], model: str, usage: Any) -> Diagnosis:
         confidence=coerce_confidence(str(payload.get("confidence") or "low")),
         category=coerce_category(str(payload.get("category") or "script")),
         fixes=tuple(fixes),
+        citations=citations,
+        unresolved_citations=unresolved,
         model=model,
         input_tokens=int(getattr(usage, "input_tokens", 0) or 0),
         output_tokens=int(getattr(usage, "output_tokens", 0) or 0),
@@ -137,4 +160,9 @@ def diagnose(
         raise DiagnosisError("Claude declined to analyse this trace.")
 
     payload = _extract_json(list(response.content))
-    return _to_diagnosis(payload, model=model, usage=getattr(response, "usage", None))
+    return _to_diagnosis(
+        payload,
+        model=model,
+        usage=getattr(response, "usage", None),
+        distilled=distilled,
+    )

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from pipelinemd.models import (
     Category,
+    Citation,
     Confidence,
     Diagnosis,
     DistilledLog,
@@ -187,6 +188,22 @@ def test_diagnosis_defaults() -> None:
     )
     assert diagnosis.fixes == ()
     assert (diagnosis.input_tokens, diagnosis.output_tokens) == (0, 0)
+
+
+def test_fully_grounded_requires_citations_and_no_invented_ones() -> None:
+    base = {
+        "summary": "s",
+        "root_cause": "r",
+        "confidence": Confidence.HIGH,
+        "category": Category.DEPENDENCY,
+    }
+    cited = (Citation(line_number=2, text="npm ERR!"),)
+
+    assert Diagnosis(**base, citations=cited).fully_grounded
+    assert not Diagnosis(**base).fully_grounded, "no citation is not grounded"
+    assert not Diagnosis(**base, citations=cited, unresolved_citations=(41203,)).fully_grounded, (
+        "one invented line spoils it"
+    )
 
 
 def test_fix_patch_is_optional() -> None:

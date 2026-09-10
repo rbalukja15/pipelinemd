@@ -207,15 +207,39 @@ class Fix:
 
 
 @dataclass(frozen=True, slots=True)
+class Citation:
+    """A distilled-log line a diagnosis pointed at, resolved back to its text.
+
+    A citation only exists once it has been checked against the evidence the
+    model was actually shown. A line number the model invented never becomes a
+    Citation - it is recorded separately as unresolved.
+    """
+
+    line_number: int
+    text: str
+    section: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class Diagnosis:
     summary: str
     root_cause: str
     confidence: Confidence
     category: Category
     fixes: tuple[Fix, ...] = ()
+    citations: tuple[Citation, ...] = ()
+    #: Line numbers the model cited that do not exist in the evidence. Kept
+    #: rather than discarded: a diagnosis that half-invents its evidence should
+    #: say so on the face of the report.
+    unresolved_citations: tuple[int, ...] = ()
     model: str = ""
     input_tokens: int = 0
     output_tokens: int = 0
+
+    @property
+    def fully_grounded(self) -> bool:
+        """True when every line the diagnosis cited exists in the evidence."""
+        return bool(self.citations) and not self.unresolved_citations
 
 
 # ---------------------------------------------------------------------------

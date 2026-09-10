@@ -105,6 +105,16 @@ def report_to_dict(report: Report) -> dict[str, Any]:
                 {"title": fix.title, "detail": fix.detail, "patch": fix.patch}
                 for fix in diagnosis.fixes
             ],
+            "citations": [
+                {
+                    "line_number": citation.line_number,
+                    "text": citation.text,
+                    "section": citation.section,
+                }
+                for citation in diagnosis.citations
+            ],
+            "unresolved_citations": list(diagnosis.unresolved_citations),
+            "fully_grounded": diagnosis.fully_grounded,
             "model": diagnosis.model,
             "usage": {
                 "input_tokens": diagnosis.input_tokens,
