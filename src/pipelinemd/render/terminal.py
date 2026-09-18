@@ -7,6 +7,8 @@ from .evidence import gap_before, select_display_lines
 from .style import Style
 
 _CONFIDENCE_MARK = {Confidence.HIGH: "●", Confidence.MEDIUM: "◐", Confidence.LOW: "○"}
+#: Floor for clipped text, so a hostile `width` cannot invert the slice.
+_MIN_CLIP = 8
 
 
 def _colour_for(style: Style, confidence: Confidence) -> object:
@@ -35,6 +37,14 @@ def _wrap(text: str, width: int, indent: str = "") -> list[str]:
                 line = candidate if line != indent else f"{indent}{word}"
         out.append(line)
     return out
+
+
+def _clip(text: str, limit: int) -> str:
+    """Trim to fit and say so, never silently and never on a negative slice."""
+    limit = max(_MIN_CLIP, limit)
+    if len(text) <= limit:
+        return text
+    return text[: limit - 1] + "…"
 
 
 def _header(report: Report, style: Style) -> list[str]:
@@ -77,6 +87,24 @@ def _diagnosis(report: Report, style: Style, width: int) -> list[str]:
     if diagnosis.root_cause:
         lines.append("")
         lines.extend(_wrap(diagnosis.root_cause, width, indent="  "))
+
+    if diagnosis.citations:
+        lines += ["", style.heading("Cited evidence")]
+        for citation in diagnosis.citations:
+            number = style.dim(f"L{citation.line_number}".rjust(8))
+            # A cited entry standing for a collapsed run must say so, or one
+            # quote silently represents ten lines.
+            suffix = style.dim(f"  [x{citation.repeat}]") if citation.repeat > 1 else ""
+            lines.append(f"{number}  {_clip(citation.text, width - 12)}{suffix}")
+    if diagnosis.unresolved_citations:
+        invented = ", ".join(f"L{n}" for n in diagnosis.unresolved_citations)
+        warning = _wrap(
+            f"⚠ also cited {invented}, which is not in the evidence — treat the "
+            "surrounding claim with suspicion.",
+            width,
+            indent="  ",
+        )
+        lines += ["", *(style.yellow(line) for line in warning)]
 
     if diagnosis.fixes:
         lines += ["", style.heading("Suggested fixes")]
@@ -129,26 +157,40 @@ def _fixes_from_rules(report: Report, style: Style, width: int) -> list[str]:
     return lines
 
 
+def _cited_display_numbers(report: Report) -> frozenset[int]:
+    """Displayed line numbers a citation points at.
+
+    Only printed numbers are citable, so every citation already names a line
+    the excerpt shows - a direct match, no range arithmetic.
+    """
+    diagnosis = report.diagnosis
+    if diagnosis is None:
+        return frozenset()
+    return frozenset(citation.line_number for citation in diagnosis.citations)
+
+
 def _evidence(report: Report, style: Style, limit: int) -> list[str]:
     distilled = report.distilled
     stats = distilled.stats
     shown, dropped = select_display_lines(distilled, limit)
+    cited = _cited_display_numbers(report)
 
     header = style.heading("Evidence") + style.dim(
         f"   {stats.evidence_lines} of {stats.raw_lines} lines · {stats.reduction:.1%} reduced"
     )
     lines = ["", header]
     if dropped:
-        lines.append(style.dim(f"       showing the {len(shown)} most relevant; {dropped} hidden"))
+        lines.append(style.dim(f"        showing the {len(shown)} most relevant; {dropped} hidden"))
 
     previous: EvidenceLine | None = None
     for line in shown:
         if gap := gap_before(previous, line):
-            lines.append(style.dim(f"       … {gap} lines omitted …"))
+            lines.append(style.dim(f"        … {gap} lines omitted …"))
+        marker = style.cyan("›") if line.number in cited else " "
         number = style.dim(f"{line.number:>6}")
         text = style.red(line.text) if line.is_anchor else line.text
         suffix = style.dim(f"  [x{line.repeat}]") if line.collapsed else ""
-        lines.append(f"{number}  {text}{suffix}")
+        lines.append(f"{marker}{number}  {text}{suffix}")
         previous = line
     return lines
 

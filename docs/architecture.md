@@ -27,6 +27,7 @@ local file ─┘                                                     │       
 | `rules/catalog.py` | 58 failure signatures with fixes. Data, not code. |
 | `rules/engine.py` | Apply the catalog, rank the hits. |
 | `diagnose/prompt.py` | Build the request. Owns the JSON schema. |
+| `diagnose/citations.py` | Resolve the line numbers a diagnosis cited back to real evidence lines. |
 | `diagnose/claude.py` | Make the call. Never fatal. |
 | `render/*` | Terminal, markdown, JSON. |
 | `cli.py` | Argument parsing, orchestration, exit codes. |
@@ -76,6 +77,44 @@ error-shaped lines. Three mechanisms address it:
 - **The model.** Rules cannot tell which of two genuine errors is upstream of
   the other. That judgement is the one thing the LLM layer is asked for, and the
   prompt says so explicitly.
+
+## Grounding: a diagnosis must point at something
+
+A model asked to explain a failure will produce a confident paragraph citing
+line 41203 whether or not line 41203 says anything of the sort. Prose alone
+gives a reader no way to tell the difference.
+
+So the schema requires `evidence_lines`, and every number in it is resolved
+against the evidence the model was actually shown — not the whole cleaned
+trace, because the excerpt is all it saw, so anything outside it could not have
+been read, only guessed.
+
+Citable means *printed*, and nothing more. A collapsed run shown as
+`100 [x10]` contributes the number 100 alone; 101-109 were never put in front
+of the model, so citing one is a guess. The strict rule is also the safe one: a
+fuzzy collapse folds lines that merely look alike — `Downloading package-0`
+through `package-9` share one entry — so mapping an offset onto the run's text
+would report *line 104 said `package-0`* when line 104 said `package-4`. A
+manufactured quote wearing a grounding badge is the one outcome this check
+exists to prevent, so the resolver refuses to do range arithmetic at all. A
+citation carries the run's repeat count instead, and every renderer prints it,
+so a reader can see that one quote stands for ten lines.
+
+What happens next depends on how much survives:
+
+- **Nothing resolves** → the diagnosis is rejected. It is describing a log it
+  did not read, and reporting it would be worse than reporting nothing.
+- **Some resolve** → the diagnosis stands, the invented numbers are kept in
+  `unresolved_citations`, and every renderer says so on the face of the report.
+  Half-grounded is usable; silently half-grounded is not.
+
+This is why line numbers are preserved through every distillation stage. They
+are not a display convenience — they are the mechanism that makes a diagnosis
+checkable.
+
+Confidence is deliberately *not* adjusted when citations fail to resolve. That
+belongs with the calibration work in #18, and mixing it in here would hide a
+grounding failure behind a number.
 
 ## Why the core has no dependencies
 
