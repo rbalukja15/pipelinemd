@@ -110,6 +110,7 @@ def report_to_dict(report: Report) -> dict[str, Any]:
                     "line_number": citation.line_number,
                     "text": citation.text,
                     "section": citation.section,
+                    "repeat": citation.repeat,
                 }
                 for citation in diagnosis.citations
             ],

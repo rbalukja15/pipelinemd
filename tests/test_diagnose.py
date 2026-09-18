@@ -176,6 +176,14 @@ def test_schema_requires_evidence_lines() -> None:
     assert field["items"]["type"] == "integer"
 
 
+def test_schema_constrains_the_citation_list_at_decode_time() -> None:
+    """A bounded array beats a post-hoc rejection: the call is already paid for."""
+    field = DIAGNOSIS_SCHEMA["properties"]["evidence_lines"]  # type: ignore[index]
+    assert field["minItems"] == 1
+    assert field["maxItems"] == 6
+    assert field["items"]["minimum"] == 1
+
+
 def test_prompt_tells_the_model_citations_must_be_real() -> None:
     assert "evidence_lines" in SYSTEM_PROMPT
     assert "not in the excerpt" in SYSTEM_PROMPT

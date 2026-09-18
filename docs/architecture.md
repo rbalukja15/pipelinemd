@@ -87,9 +87,18 @@ gives a reader no way to tell the difference.
 So the schema requires `evidence_lines`, and every number in it is resolved
 against the evidence the model was actually shown — not the whole cleaned
 trace, because the excerpt is all it saw, so anything outside it could not have
-been read, only guessed. Resolution is range-aware: a collapsed run displayed
-as `100 [x5]` stands for lines 100-104, and each resolves to what that run
-said.
+been read, only guessed.
+
+Citable means *printed*, and nothing more. A collapsed run shown as
+`100 [x10]` contributes the number 100 alone; 101-109 were never put in front
+of the model, so citing one is a guess. The strict rule is also the safe one: a
+fuzzy collapse folds lines that merely look alike — `Downloading package-0`
+through `package-9` share one entry — so mapping an offset onto the run's text
+would report *line 104 said `package-0`* when line 104 said `package-4`. A
+manufactured quote wearing a grounding badge is the one outcome this check
+exists to prevent, so the resolver refuses to do range arithmetic at all. A
+citation carries the run's repeat count instead, and every renderer prints it,
+so a reader can see that one quote stands for ten lines.
 
 What happens next depends on how much survives:
 

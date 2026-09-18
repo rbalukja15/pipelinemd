@@ -218,6 +218,9 @@ class Citation:
     line_number: int
     text: str
     section: str | None = None
+    #: How many trace lines the cited entry stands for. Above 1 the entry is a
+    #: collapsed run, and a reader should know one quote covers several lines.
+    repeat: int = 1
 
 
 @dataclass(frozen=True, slots=True)

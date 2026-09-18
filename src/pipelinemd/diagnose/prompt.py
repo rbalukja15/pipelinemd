@@ -65,7 +65,9 @@ DIAGNOSIS_SCHEMA: dict[str, object] = {
                 "diagnosis, exactly as printed in the excerpt. One to six "
                 "entries, most important first."
             ),
-            "items": {"type": "integer"},
+            "items": {"type": "integer", "minimum": 1},
+            "minItems": 1,
+            "maxItems": 6,
         },
         "category": {
             "type": "string",

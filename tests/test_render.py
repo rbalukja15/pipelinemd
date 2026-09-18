@@ -231,6 +231,59 @@ def test_terminal_warns_about_invented_citations(report: Report) -> None:
     assert "not in the evidence" in out
 
 
+def test_terminal_shows_the_collapse_count_on_a_cited_run(report: Report) -> None:
+    """One quote standing for ten lines must say so."""
+    folded = Diagnosis(
+        summary="s",
+        root_cause="r",
+        confidence=Confidence.LOW,
+        category=Category.SCRIPT,
+        citations=(Citation(line_number=142, text="npm WARN deprecated", repeat=9),),
+    )
+    out = render_terminal(_with(report, folded), Style(enabled=False))
+    assert "[x9]" in out
+
+
+def test_terminal_clips_a_long_citation_visibly(report: Report) -> None:
+    long = Diagnosis(
+        summary="s",
+        root_cause="r",
+        confidence=Confidence.LOW,
+        category=Category.SCRIPT,
+        citations=(Citation(line_number=142, text="x" * 500),),
+    )
+    out = render_terminal(_with(report, long), Style(enabled=False))
+    cited = next(line for line in out.splitlines() if line.strip().startswith("L142"))
+    assert "…" in cited, "clipping must be visible, not silent"
+    assert len(cited) < 200
+
+
+def test_terminal_survives_an_absurdly_narrow_width(report: Report) -> None:
+    """`width` is a public parameter; under 12 the old slice went negative."""
+    narrow = Diagnosis(
+        summary="s",
+        root_cause="r",
+        confidence=Confidence.LOW,
+        category=Category.SCRIPT,
+        citations=(Citation(line_number=142, text="npm ERR! code ERESOLVE"),),
+    )
+    out = render_terminal(_with(report, narrow), Style(enabled=False), width=4)
+    cited = next(line for line in out.splitlines() if line.strip().startswith("L142"))
+    assert cited.strip().startswith("L142")
+    assert "npm" in cited, "a tiny width must still show the head of the line"
+
+
+def test_markdown_shows_the_collapse_count(report: Report) -> None:
+    folded = Diagnosis(
+        summary="s",
+        root_cause="r",
+        confidence=Confidence.LOW,
+        category=Category.SCRIPT,
+        citations=(Citation(line_number=142, text="npm WARN deprecated", repeat=9),),
+    )
+    assert "[x9]" in render_markdown(_with(report, folded))
+
+
 def test_markdown_shows_cited_evidence(report: Report) -> None:
     out = render_markdown(_with(report, DIAGNOSIS))
     assert "**Cited evidence**" in out
@@ -246,7 +299,12 @@ def test_markdown_warns_about_invented_citations(report: Report) -> None:
 def test_json_carries_citations_and_grounding(report: Report) -> None:
     payload = json.loads(render_json(_with(report, DIAGNOSIS)))["diagnosis"]
     assert payload["citations"] == [
-        {"line_number": 142, "text": "npm ERR! code ERESOLVE", "section": "step_script"}
+        {
+            "line_number": 142,
+            "text": "npm ERR! code ERESOLVE",
+            "section": "step_script",
+            "repeat": 1,
+        }
     ]
     assert payload["unresolved_citations"] == []
     assert payload["fully_grounded"] is True

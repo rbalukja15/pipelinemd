@@ -50,7 +50,9 @@ def render_markdown(report: Report, *, rule_limit: int = 5, evidence_limit: int 
         if diagnosis.citations:
             out += ["", "**Cited evidence**", "", "```log"]
             out += [
-                f"{citation.line_number:>6}  {citation.text}" for citation in diagnosis.citations
+                f"{citation.line_number:>6}  {citation.text}"
+                + (f"   [x{citation.repeat}]" if citation.repeat > 1 else "")
+                for citation in diagnosis.citations
             ]
             out += ["```"]
         if diagnosis.unresolved_citations:

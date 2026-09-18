@@ -7,6 +7,8 @@ from .evidence import gap_before, select_display_lines
 from .style import Style
 
 _CONFIDENCE_MARK = {Confidence.HIGH: "●", Confidence.MEDIUM: "◐", Confidence.LOW: "○"}
+#: Floor for clipped text, so a hostile `width` cannot invert the slice.
+_MIN_CLIP = 8
 
 
 def _colour_for(style: Style, confidence: Confidence) -> object:
@@ -35,6 +37,14 @@ def _wrap(text: str, width: int, indent: str = "") -> list[str]:
                 line = candidate if line != indent else f"{indent}{word}"
         out.append(line)
     return out
+
+
+def _clip(text: str, limit: int) -> str:
+    """Trim to fit and say so, never silently and never on a negative slice."""
+    limit = max(_MIN_CLIP, limit)
+    if len(text) <= limit:
+        return text
+    return text[: limit - 1] + "…"
 
 
 def _header(report: Report, style: Style) -> list[str]:
@@ -82,7 +92,10 @@ def _diagnosis(report: Report, style: Style, width: int) -> list[str]:
         lines += ["", style.heading("Cited evidence")]
         for citation in diagnosis.citations:
             number = style.dim(f"L{citation.line_number}".rjust(8))
-            lines.append(f"{number}  {citation.text[: width - 12]}")
+            # A cited entry standing for a collapsed run must say so, or one
+            # quote silently represents ten lines.
+            suffix = style.dim(f"  [x{citation.repeat}]") if citation.repeat > 1 else ""
+            lines.append(f"{number}  {_clip(citation.text, width - 12)}{suffix}")
     if diagnosis.unresolved_citations:
         invented = ", ".join(f"L{n}" for n in diagnosis.unresolved_citations)
         warning = _wrap(
@@ -147,21 +160,13 @@ def _fixes_from_rules(report: Report, style: Style, width: int) -> list[str]:
 def _cited_display_numbers(report: Report) -> frozenset[int]:
     """Displayed line numbers a citation points at.
 
-    A citation may land inside a collapsed run, whose displayed number is the
-    run's head - so match by range, not equality, or the marker goes missing on
-    exactly the lines that were folded.
+    Only printed numbers are citable, so every citation already names a line
+    the excerpt shows - a direct match, no range arithmetic.
     """
     diagnosis = report.diagnosis
-    if diagnosis is None or not diagnosis.citations:
+    if diagnosis is None:
         return frozenset()
-    cited = {citation.line_number for citation in diagnosis.citations}
-    marked: set[int] = set()
-    for block in report.distilled.evidence:
-        for line in block.lines:
-            span = range(line.number, line.number + max(1, line.repeat))
-            if any(number in span for number in cited):
-                marked.add(line.number)
-    return frozenset(marked)
+    return frozenset(citation.line_number for citation in diagnosis.citations)
 
 
 def _evidence(report: Report, style: Style, limit: int) -> list[str]:

@@ -21,17 +21,18 @@ from ..models import Citation, DistilledLog, EvidenceLine
 def citable_lines(distilled: DistilledLog) -> dict[int, EvidenceLine]:
     """Every line number a diagnosis may legitimately cite.
 
-    A collapsed run displayed as one entry still stands for each line it
-    folded, so ``100 [x5]`` makes 100-104 all citable and all resolve to the
-    run's text - which is, by definition of the collapse, what each of them
-    said.
+    Exactly the numbers printed in the excerpt, and nothing else. A collapsed
+    run shown as ``100 [x10]`` contributes 100 alone: 101-109 were never put in
+    front of the model, so citing one of them is a guess, not a reading.
+
+    The stricter rule is also the safe one. A fuzzy collapse folds lines that
+    merely *look* alike - ``Downloading package-0`` through ``package-9`` share
+    a single entry - so mapping an offset onto the run's text would hand back
+    "line 104 said ``package-0``" when line 104 said ``package-4``: a
+    manufactured quote wearing a grounding badge, which is the one outcome this
+    module exists to prevent.
     """
-    citable: dict[int, EvidenceLine] = {}
-    for block in distilled.evidence:
-        for line in block.lines:
-            for offset in range(max(1, line.repeat)):
-                citable[line.number + offset] = line
-    return citable
+    return {line.number: line for block in distilled.evidence for line in block.lines}
 
 
 def resolve_citations(
@@ -55,7 +56,14 @@ def resolve_citations(
         if line is None:
             unresolved.append(number)
             continue
-        resolved.append(Citation(line_number=number, text=line.text, section=line.section))
+        resolved.append(
+            Citation(
+                line_number=number,
+                text=line.text,
+                section=line.section,
+                repeat=max(1, line.repeat),
+            )
+        )
     return tuple(resolved), tuple(unresolved)
 
 
@@ -65,6 +73,10 @@ def coerce_line_numbers(raw: object) -> list[int]:
     Structured output constrains the type, but this layer is also reached by
     tests and by any future non-schema path, so anything unparseable is simply
     not a citation rather than an exception.
+
+    Lines are numbered from 1, so anything at or below zero is malformed rather
+    than invented - reporting it as "also cited L-5" would be noise dressed up
+    as a finding.
     """
     if not isinstance(raw, list):
         return []
@@ -73,7 +85,11 @@ def coerce_line_numbers(raw: object) -> list[int]:
         if isinstance(entry, bool):
             continue
         if isinstance(entry, int):
-            numbers.append(entry)
-        elif isinstance(entry, str) and entry.strip().lstrip("-").isdigit():
-            numbers.append(int(entry.strip()))
+            candidate = entry
+        elif isinstance(entry, str) and entry.strip().isdigit():
+            candidate = int(entry.strip())
+        else:
+            continue
+        if candidate >= 1:
+            numbers.append(candidate)
     return numbers
