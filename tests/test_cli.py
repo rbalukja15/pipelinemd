@@ -12,7 +12,14 @@ from typing import Any
 import pytest
 
 from pipelinemd import cli
-from pipelinemd.cli import EXIT_GITLAB, EXIT_NOTHING, EXIT_OK, EXIT_USAGE, main
+from pipelinemd.cli import (
+    EXIT_BELOW_THRESHOLD,
+    EXIT_GITLAB,
+    EXIT_NOTHING,
+    EXIT_OK,
+    EXIT_USAGE,
+    main,
+)
 
 TRACES = Path(__file__).parent / "fixtures" / "traces"
 
@@ -354,6 +361,41 @@ def test_with_ci_config_reaches_the_model(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setattr(cli, "run_diagnosis", fake)
     run("diagnose", "https://gitlab.com/acme/web/-/jobs/1", "--with-ci-config")
     assert captured["ci_config"] == "build:\n  script: npm ci\n"
+
+
+# -- eval -------------------------------------------------------------------
+
+
+def test_eval_prints_a_scorecard() -> None:
+    code, out, _err = run("eval")
+    assert code == EXIT_OK
+    assert "rule@1" in out
+    assert "evidence" in out
+
+
+def test_eval_json_is_versioned_and_parses() -> None:
+    code, out, _err = run("eval", "--format", "json")
+    payload = json.loads(out)
+    assert code == EXIT_OK
+    assert payload["schema_version"] == 1
+    assert payload["cases"] >= 60
+
+
+def test_eval_gate_fails_below_the_floor() -> None:
+    """--min-rule-accuracy is what turns the report into a CI guard."""
+    code, _out, err = run("eval", "--min-rule-accuracy", "1.0")
+    assert code == EXIT_BELOW_THRESHOLD
+    assert "below the required" in err
+
+
+def test_eval_gate_passes_above_the_floor() -> None:
+    assert run("eval", "--min-rule-accuracy", "0.5")[0] == EXIT_OK
+
+
+def test_eval_reports_a_missing_corpus_clearly(tmp_path: Path) -> None:
+    code, _out, err = run("eval", "--corpus", str(tmp_path))
+    assert code == EXIT_USAGE
+    assert "No corpus" in err
 
 
 # -- misc -------------------------------------------------------------------
