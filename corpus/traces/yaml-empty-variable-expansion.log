@@ -1,0 +1,21 @@
+[0KRunning with gitlab-runner 16.11.0 (91a27b2a)[0;m
+[0;m  on green-4.shared.runners-manager J2xYzQpL, system ID: s_88c1[0;m
+section_start:1700000000:resolve_secrets[collapsed=true][0K[36;1mResolving secrets[0;m
+section_end:1700000001:resolve_secrets[0K
+section_start:1700000001:prepare_executor[collapsed=true][0K[36;1mPreparing the "docker" executor[0;m
+[0;m Using Docker executor with image docker:26-cli ...[0;m
+[0;m Using docker image sha256:9f2b1c for docker:26-cli ...[0;m
+section_end:1700000012:prepare_executor[0K
+section_start:1700000012:get_sources[collapsed=true][0K[36;1mGetting source from Git repository[0;m
+[32;1mFetching changes with git depth set to 20...[0;m
+Reinitialized existing Git repository in /builds/acme/web/.git/
+[32;1mChecking out 7d41c9ab as detached HEAD (ref is main)...[0;m
+section_end:1700000020:get_sources[0K
+section_start:1700000020:step_script[0K[36;1mExecuting "step_script" stage of the job script[0;m
+[32;1m$ docker build -t $CI_REGISTRY_IMAGE:$IMAGE_TAG .[0;m
+invalid argument "registry.gitlab.com/acme/web:" for "-t, --tag" flag: invalid reference format
+See 'docker build --help'.
+section_end:1700000090:step_script[0K
+section_start:1700000090:cleanup_file_variables[collapsed=true][0K[36;1mCleaning up project directory and file based variables[0;m
+section_end:1700000091:cleanup_file_variables[0K
+[31;1mERROR: Job failed: exit code 125[0;m
