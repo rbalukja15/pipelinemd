@@ -69,8 +69,8 @@ the file around it changes.
 
 ## Deliberate gaps
 
-Eight cases carry `"expected_rule": null`. These are failures the catalog does
+Seven cases carry `"expected_rule": null`. These are failures the catalog does
 **not** cover — RSpec, Vitest and PHPUnit output, artifact size limits, a git
-`502`, a connection reset — and they are in the corpus precisely so the eval
-reports the gap instead of hiding it. Adding a rule should flip one of these
+`502`, a yamllint error, an empty variable expansion — and they are in the
+corpus precisely so the eval reports the gap instead of hiding it. Adding a rule should flip one of these
 to a real id; deleting the case to make a number look better should not happen.
