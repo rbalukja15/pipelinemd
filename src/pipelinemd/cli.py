@@ -24,6 +24,7 @@ from .diagnose import diagnose as run_diagnosis
 from .distill import distill
 from .distill.extract import DEFAULT_MAX_LINES, DEFAULT_TAIL_LINES, DEFAULT_THRESHOLD
 from .errors import DiagnosisError, GitLabError, PipelinemdError, UsageError
+from .evaluate import eval_report_to_dict, format_report, run_eval
 from .gitlab import GitLabClient, Target, parse_target, rebase, target_from_parts
 from .models import JobRef, Report
 from .render import ColorChoice, make_style, render_markdown, render_terminal
@@ -34,6 +35,8 @@ EXIT_OK = 0
 EXIT_USAGE = 2
 EXIT_GITLAB = 3
 EXIT_NOTHING = 4
+#: Eval ran fine but breached a gate the caller set.
+EXIT_BELOW_THRESHOLD = 5
 
 MAX_JOBS_DEFAULT = 1
 
@@ -177,6 +180,41 @@ def build_parser() -> argparse.ArgumentParser:
         "--color", choices=("auto", "always", "never"), default="auto", help="Colourise output."
     )
     rules_parser.set_defaults(func=cmd_rules)
+
+    # eval ------------------------------------------------------------------
+    eval_parser = subparsers.add_parser(
+        "eval",
+        help="Score the deterministic pipeline against the labelled corpus.",
+        description=(
+            "Runs the distiller and rule engine over every labelled case and reports "
+            "rule@1, evidence hit rate and exit-code accuracy per failure class. "
+            "Offline and deterministic: the LLM layer is not scored, so the same "
+            "corpus always gives the same numbers."
+        ),
+    )
+    eval_parser.add_argument(
+        "--corpus", metavar="PATH", help="Corpus directory (default: ./corpus)."
+    )
+    eval_parser.add_argument(
+        "-f", "--format", choices=("text", "json"), default="text", help="Output format."
+    )
+    eval_parser.add_argument("-o", "--output", metavar="PATH", help="Write to a file.")
+    eval_parser.add_argument(
+        "--min-rule-accuracy",
+        type=float,
+        metavar="RATE",
+        help="Exit non-zero if rule@1 falls below this (0-1); use as a regression gate.",
+    )
+    eval_parser.add_argument(
+        "--max-gap-false-positives",
+        type=int,
+        metavar="N",
+        help=(
+            "Exit non-zero if more than N known-gap cases fire a rule. "
+            "Gaps are excluded from every rate, so --min-rule-accuracy cannot see them."
+        ),
+    )
+    eval_parser.set_defaults(func=cmd_eval)
 
     # explain -------------------------------------------------------------
     explain_parser = subparsers.add_parser("explain", help="Show one rule in full.")
@@ -450,6 +488,42 @@ def cmd_rules(args: argparse.Namespace, stdout: IO[str], stderr: IO[str], stdin:
             )
     stdout.write(style.dim("\nRun `pipelinemd explain <id>` for the full entry.\n"))
     return EXIT_OK
+
+
+def cmd_eval(args: argparse.Namespace, stdout: IO[str], stderr: IO[str], stdin: IO[str]) -> int:
+    # Validate the gates before doing the work: `--min-rule-accuracy 95`, from
+    # someone reading it as a percentage, used to run the whole corpus and then
+    # report "below the required 9500.0%", and `-1` silently always passed.
+    floor = args.min_rule_accuracy
+    if floor is not None and not 0.0 <= floor <= 1.0:
+        raise UsageError(f"--min-rule-accuracy takes a rate between 0 and 1, not {floor:g}.")
+    ceiling = args.max_gap_false_positives
+    if ceiling is not None and ceiling < 0:
+        raise UsageError(f"--max-gap-false-positives cannot be negative, got {ceiling}.")
+
+    report = run_eval(Path(args.corpus) if args.corpus else None)
+
+    if args.format == "json":
+        text = json.dumps(eval_report_to_dict(report), indent=2, ensure_ascii=False) + "\n"
+    else:
+        text = format_report(report)
+    _write(text, args.output, stdout)
+
+    # Report every breached gate, not just the first: one run should say
+    # everything that is wrong.
+    failed = False
+    if floor is not None and report.rule_accuracy < floor:
+        stderr.write(f"rule@1 {report.rule_accuracy:.1%} is below the required {floor:.1%}.\n")
+        failed = True
+    false_positives = len(report.gap_false_positives)
+    if ceiling is not None and false_positives > ceiling:
+        names = ", ".join(r.case.id for r in report.gap_false_positives)
+        stderr.write(
+            f"{false_positives} known-gap case(s) fired a rule, above the allowed "
+            f"{ceiling}: {names}.\n"
+        )
+        failed = True
+    return EXIT_BELOW_THRESHOLD if failed else EXIT_OK
 
 
 def cmd_explain(args: argparse.Namespace, stdout: IO[str], stderr: IO[str], stdin: IO[str]) -> int:

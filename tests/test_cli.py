@@ -12,7 +12,14 @@ from typing import Any
 import pytest
 
 from pipelinemd import cli
-from pipelinemd.cli import EXIT_GITLAB, EXIT_NOTHING, EXIT_OK, EXIT_USAGE, main
+from pipelinemd.cli import (
+    EXIT_BELOW_THRESHOLD,
+    EXIT_GITLAB,
+    EXIT_NOTHING,
+    EXIT_OK,
+    EXIT_USAGE,
+    main,
+)
 
 TRACES = Path(__file__).parent / "fixtures" / "traces"
 
@@ -354,6 +361,120 @@ def test_with_ci_config_reaches_the_model(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setattr(cli, "run_diagnosis", fake)
     run("diagnose", "https://gitlab.com/acme/web/-/jobs/1", "--with-ci-config")
     assert captured["ci_config"] == "build:\n  script: npm ci\n"
+
+
+# -- eval -------------------------------------------------------------------
+
+
+def test_eval_prints_a_scorecard() -> None:
+    code, out, _err = run("eval")
+    assert code == EXIT_OK
+    assert "rule@1" in out
+    assert "evidence" in out
+
+
+def test_eval_json_is_versioned_and_parses() -> None:
+    code, out, _err = run("eval", "--format", "json")
+    payload = json.loads(out)
+    assert code == EXIT_OK
+    assert payload["schema_version"] == 1
+    assert payload["cases"] >= 60
+
+
+def test_eval_gate_fails_below_the_floor() -> None:
+    """--min-rule-accuracy is what turns the report into a CI guard."""
+    code, _out, err = run("eval", "--min-rule-accuracy", "1.0")
+    assert code == EXIT_BELOW_THRESHOLD
+    assert "below the required" in err
+
+
+def test_eval_gate_passes_above_the_floor() -> None:
+    assert run("eval", "--min-rule-accuracy", "0.5")[0] == EXIT_OK
+
+
+def _gap_corpus(tmp_path: Path) -> str:
+    """One case, labelled as a gap, whose trace fires a rule anyway."""
+    (tmp_path / "traces").mkdir()
+    (tmp_path / "traces" / "one.log").write_text(
+        "Running with gitlab-runner 16.11.0 (abc)\n"
+        "$ npm ci\n"
+        "npm ERR! code ERESOLVE\n"
+        "ERROR: Job failed: exit code 1\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "corpus.jsonl").write_text(
+        json.dumps(
+            {
+                "id": "one",
+                "failure_class": "test",
+                "expected_rule": None,
+                "exit_code": 1,
+                "evidence_marker": "ERESOLVE",
+                "trace": "traces/one.log",
+                "provenance": "observed",
+                "notes": "coverage gap, for the test",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return str(tmp_path)
+
+
+def test_eval_gate_catches_a_false_positive_on_a_known_gap(tmp_path: Path) -> None:
+    """Gaps are in no rate, so --min-rule-accuracy cannot see this one."""
+    code, _out, err = run(
+        "eval", "--corpus", _gap_corpus(tmp_path), "--max-gap-false-positives", "0"
+    )
+    assert code == EXIT_BELOW_THRESHOLD
+    assert "fired a rule" in err
+    assert "one" in err
+
+
+def test_eval_false_positive_gate_passes_on_the_real_corpus() -> None:
+    assert run("eval", "--max-gap-false-positives", "0")[0] == EXIT_OK
+
+
+def test_eval_reports_every_breached_gate_not_just_the_first(tmp_path: Path) -> None:
+    code, _out, err = run(
+        "eval",
+        "--corpus",
+        _gap_corpus(tmp_path),
+        "--min-rule-accuracy",
+        "1.0",
+        "--max-gap-false-positives",
+        "0",
+    )
+    assert code == EXIT_BELOW_THRESHOLD
+    assert "below the required" in err
+    assert "fired a rule" in err
+
+
+@pytest.mark.parametrize("rate", ["95", "-1", "1.5"])
+def test_a_rule_accuracy_floor_outside_zero_to_one_is_a_usage_error(rate: str) -> None:
+    """`--min-rule-accuracy 95` used to report "below the required 9500.0%"."""
+    code, _out, err = run("eval", "--min-rule-accuracy", rate)
+    assert code == EXIT_USAGE
+    assert "between 0 and 1" in err
+
+
+def test_a_negative_false_positive_ceiling_is_a_usage_error() -> None:
+    code, _out, err = run("eval", "--max-gap-false-positives", "-1")
+    assert code == EXIT_USAGE
+    assert "cannot be negative" in err
+
+
+def test_a_bad_gate_is_rejected_before_anything_is_scored() -> None:
+    """Fail fast: a typo should not print a scorecard and then reject the flag."""
+    code, out, _err = run("eval", "--min-rule-accuracy", "95")
+    assert code == EXIT_USAGE
+    assert out == "", "the report was written before the flag was validated"
+
+
+def test_eval_reports_a_missing_corpus_clearly(tmp_path: Path) -> None:
+    code, _out, err = run("eval", "--corpus", str(tmp_path))
+    assert code == EXIT_USAGE
+    assert "No corpus" in err
 
 
 # -- misc -------------------------------------------------------------------

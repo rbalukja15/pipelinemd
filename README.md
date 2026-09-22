@@ -88,6 +88,19 @@ kubectl logs job/ci-run | pipelinemd distill -
 No network, no model, no key. Useful on its own for shrinking a log before
 pasting it anywhere.
 
+### Score it against the corpus
+
+```bash
+make eval
+```
+
+Runs the distiller and rule engine over 60 labelled traces in [`corpus/`](corpus/README.md)
+and reports rule@1, evidence hit rate and exit-code accuracy per failure class.
+Offline and deterministic. Results and their caveats: [docs/evaluation.md](docs/evaluation.md).
+
+`make gate` is the same run with CI's thresholds, and runs on every push — a
+catalog regression fails the build rather than being noticed later.
+
 ### Browse the rule catalog
 
 ```bash
