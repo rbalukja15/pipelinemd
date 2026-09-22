@@ -11,10 +11,8 @@ Closes #
 <!-- The commands a reviewer should run, and what they should see. -->
 
 ```bash
-pip install -e ".[dev]"
-ruff check src tests && ruff format --check src tests
-mypy
-pytest
+make install
+make check    # lint + typecheck + test + eval gate, the targets CI runs
 ```
 
 ## Checklist
