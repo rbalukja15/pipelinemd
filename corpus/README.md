@@ -54,12 +54,19 @@ separately and the number starts to mean what it says.
 | --- | --- |
 | `id` | Unique, kebab-case, matches the trace filename. |
 | `failure_class` | One of the v1 taxonomy classes from #17: `yaml`, `ci_vars`, `image_pull`, `cache_artifact`, `test`, `runner`, `flaky`. |
-| `expected_rule` | The catalog rule that should rank first — or `null` where no rule covers this failure yet. |
-| `exit_code` | What the runner reported. |
+| `expected_rule` | The catalog rule that should rank first — or `null`, and only `null`, where no rule covers this failure yet. |
+| `exit_code` | What the runner reported. An integer, required: it is scored, so it is never defaulted. |
 | `evidence_marker` | Text a human would point at to explain the failure. Distillation must keep it; the eval measures how often it does. |
-| `trace` | Path relative to this directory. |
+| `trace` | Path relative to this directory, and inside it. |
 | `provenance` | `authored` or `observed`. See above. |
-| `notes` | Free text. Say what is unusual. |
+| `notes` | Free text. Say what is unusual. Required for a gap — see below. |
+
+Every field but `notes` is required, and the loader raises rather than skips on
+anything malformed. That is deliberate: an eval number computed over a corpus
+with a typo'd label is wrong rather than absent, which is the worse failure.
+`""` is not a substitute for `null` in `expected_rule`, because the eval
+excludes `null` cases from the rule@1 denominator — a stray empty string would
+move the score instead of failing the load.
 
 ### Why a marker rather than a line number
 
@@ -74,3 +81,7 @@ Seven cases carry `"expected_rule": null`. These are failures the catalog does
 `502`, a yamllint error, an empty variable expansion — and they are in the
 corpus precisely so the eval reports the gap instead of hiding it. Adding a rule should flip one of these
 to a real id; deleting the case to make a number look better should not happen.
+
+A gap's `notes` must say *why* no rule fires, not just describe the trace — the
+test suite checks for it. A gap the catalog could plausibly cover, described as
+though it were exotic, is how coverage debt gets forgotten.
