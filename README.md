@@ -14,7 +14,7 @@ pipelinemd does two things about that:
 1. **A deterministic distiller** replays the trace the way a terminal would,
    strips the noise, scores every line for failure-likeness, and keeps only the
    regions that explain the outcome — then matches them against a catalog of
-   **58 known CI failure signatures**, each with a real fix.
+   **59 known CI failure signatures**, each with a real fix.
 2. **An optional Claude diagnosis** reads only that distilled evidence and
    names the root cause, separating the actual fault from its fallout — and
    must cite the evidence lines it relied on. A diagnosis that cites nothing
@@ -104,7 +104,7 @@ catalog regression fails the build rather than being noticed later.
 ### Browse the rule catalog
 
 ```bash
-pipelinemd rules                        # all 58, grouped by category
+pipelinemd rules                        # all 59, grouped by category
 pipelinemd rules --category dependency
 pipelinemd rules --search docker
 pipelinemd explain npm.eresolve         # one rule in full, patterns included

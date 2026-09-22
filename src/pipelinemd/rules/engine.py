@@ -24,7 +24,21 @@ EVIDENCE_BONUS = 30.0
 EXIT_CODE_BONUS = 20.0
 RECENCY_BONUS = 20.0
 CLEANUP_PENALTY = 45.0
+QUOTED_VERDICT_PENALTY = 25.0
 DEFAULT_MIN_SCORE = 1.0
+
+# The runner's own verdict on the job. What follows the prefix is the runner
+# quoting the thing that went wrong; the verdict itself is the runner's
+# conclusion about the whole job. A rule anchored on the conclusion is
+# adjudicating; one matching inside the quote is describing what was quoted.
+#
+#   ERROR: Job failed (system failure): Cannot connect to the Docker daemon
+#   ^--- runner.system-failure           ^--- docker.daemon-unreachable
+#
+# Both are true. The first is the answer, because the docker daemon in question
+# is the runner's, and the job never started - so "fix your docker setup" is
+# advice about the wrong machine.
+VERDICT_LINE = re.compile(r"^ERROR: Job failed")
 
 # gitlab-runner sections that only run *after* the script has already decided
 # the job's fate. A rule firing in one of these is describing fallout - the
@@ -52,16 +66,22 @@ def _first_match(
     patterns: tuple[str, ...],
     lines: list[tuple[int, str]],
     excludes: tuple[str, ...],
-) -> tuple[int, str] | None:
-    """First line matching any pattern and no exclusion, in trace order."""
+) -> tuple[int, str, int] | None:
+    """First line matching any pattern and no exclusion, in trace order.
+
+    Returns the offset of the earliest match within the line as well, which is
+    what distinguishes a rule adjudicating a verdict from one describing the
+    text quoted inside it.
+    """
     compiled = [_compile(p) for p in patterns]
     compiled_excludes = [_compile(p) for p in excludes]
     for number, text in lines:
-        if not any(pattern.search(text) for pattern in compiled):
+        found = [m.start() for m in (pattern.search(text) for pattern in compiled) if m]
+        if not found:
             continue
         if any(pattern.search(text) for pattern in compiled_excludes):
             continue
-        return number, text
+        return number, text, min(found)
     return None
 
 
@@ -107,7 +127,7 @@ def match_rules(
         if not _requires_satisfied(rule, corpus):
             continue
 
-        number, text = found
+        number, text, offset = found
         score = _CONFIDENCE_WEIGHT[rule.confidence]
         if in_evidence or number in evidence_numbers:
             score += EVIDENCE_BONUS
@@ -116,6 +136,8 @@ def match_rules(
         score += RECENCY_BONUS * (number / total_lines)
         if section_of.get(number) in CLEANUP_SECTIONS:
             score -= CLEANUP_PENALTY
+        if offset > 0 and VERDICT_LINE.match(text):
+            score -= QUOTED_VERDICT_PENALTY
 
         if score < min_score:
             continue

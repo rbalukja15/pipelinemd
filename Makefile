@@ -8,14 +8,18 @@
 PYTHON ?= python3
 PYTEST_ARGS ?=
 
-# The regression floor for `make gate`. rule@1 is 47/53 = 88.7% today; 0.85 is
-# 45/53, so the gate trips on the third regression rather than the first. The
-# looser number is deliberate: the corpus is meant to grow with observed
-# traces, which will be harder than the authored ones, and a gate that goes red
-# when someone adds a real failing log discourages exactly the contribution
-# this project most needs. Single-case regressions are still visible - `make
-# eval` names every miss - they just do not fail the build on their own.
-MIN_RULE_ACCURACY ?= 0.85
+# The regression floor for `make gate`. rule@1 is 53/53 today, so 0.92 is 49/53
+# - the gate trips on the fifth regression. That headroom exists for one
+# reason: the corpus is meant to grow with observed traces, which will be
+# harder than the authored ones, and a gate that goes red the moment someone
+# commits a real failing log discourages the contribution this project most
+# needs. Single-case regressions stay visible either way, since `make eval`
+# names every miss.
+#
+# Adding hard traces will eventually push the rate under this floor, and the
+# right response is to lower it in a commit that says why. That is the point:
+# it makes the number move in review rather than silently.
+MIN_RULE_ACCURACY ?= 0.92
 
 # Known gaps are excluded from every rate, so a rule that starts firing on one
 # moves no number. Zero tolerance here: the catalog growing a confident wrong
