@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -116,7 +117,14 @@ def test_json_payload_is_serialisable_and_versioned() -> None:
 # -- a corpus of one --------------------------------------------------------
 
 
-def _mini(tmp_path: Path, *, expected_rule: str | None, marker: str, pad: int = 0) -> Path:
+def _mini(
+    tmp_path: Path,
+    *,
+    expected_rule: str | None,
+    marker: str,
+    pad: int = 0,
+    case_id: str = "one",
+) -> Path:
     (tmp_path / "traces").mkdir()
     body = "".join(f"npm http fetch GET 200 registry/pkg-{i} 12ms\n" for i in range(pad))
     (tmp_path / "traces" / "one.log").write_text(
@@ -128,7 +136,7 @@ def _mini(tmp_path: Path, *, expected_rule: str | None, marker: str, pad: int = 
     (tmp_path / "corpus.jsonl").write_text(
         json.dumps(
             {
-                "id": "one",
+                "id": case_id,
                 "failure_class": "test",
                 "expected_rule": expected_rule,
                 "exit_code": 1,
@@ -189,3 +197,111 @@ def test_empty_report_does_not_divide_by_zero() -> None:
     assert empty.rule_accuracy == 0.0
     assert empty.evidence_hit_rate == 0.0
     assert empty.exit_code_accuracy == 0.0
+
+
+# -- false positives on known gaps ------------------------------------------
+#
+# A gap case that starts firing a rule moves none of the three rates, because
+# gaps are excluded from all of them. It is also the most alarming thing the
+# eval can report, so it is counted and gateable separately.
+
+
+def test_the_real_corpus_has_no_false_positives() -> None:
+    """The anchor: every gap is correctly silent today. This is what regresses."""
+    assert REPORT.gap_false_positives == ()
+
+
+def test_a_gap_that_fires_a_rule_is_counted(tmp_path: Path) -> None:
+    report = run_eval(_mini(tmp_path, expected_rule=None, marker="ERESOLVE"))
+    assert len(report.gap_false_positives) == 1
+    assert report.gap_false_positives[0].top_rule == "npm.eresolve"
+
+
+def test_a_false_positive_moves_none_of_the_three_rates(tmp_path: Path) -> None:
+    """Exactly why it needs its own count: the headline numbers stay perfect."""
+    report = run_eval(_mini(tmp_path, expected_rule=None, marker="ERESOLVE"))
+    assert report.rule_accuracy == 0.0  # no labelled cases at all
+    assert report.evidence_hit_rate == 1.0
+    assert report.exit_code_accuracy == 1.0
+    assert report.gap_false_positives
+
+
+def test_a_false_positive_is_stated_next_to_the_headline_numbers(tmp_path: Path) -> None:
+    text = format_report(run_eval(_mini(tmp_path, expected_rule=None, marker="ERESOLVE")))
+    assert "1 false positive(s) on known gaps" in text
+    assert "FALSE POSITIVE: npm.eresolve" in text
+
+
+def test_the_json_payload_aggregates_false_positives(tmp_path: Path) -> None:
+    """A per-case flag cannot be gated on; a count in `overall` can."""
+    payload = eval_report_to_dict(run_eval(_mini(tmp_path, expected_rule=None, marker="ERESOLVE")))
+    overall = payload["overall"]
+    assert isinstance(overall, dict)
+    assert overall["gap_false_positives"] == 1
+    assert eval_report_to_dict(REPORT)["overall"]["gap_false_positives"] == 0  # type: ignore[index]
+
+
+# -- report layout ----------------------------------------------------------
+
+
+def _corpus_with_ids(tmp_path: Path, *case_ids: str) -> Path:
+    """One trace, several labels, so the report has rows of differing id length."""
+    (tmp_path / "traces").mkdir()
+    (tmp_path / "traces" / "one.log").write_text(
+        "Running with gitlab-runner 16.11.0 (abc)\n"
+        "$ npm ci\n"
+        "npm ERR! code ERESOLVE\n"
+        "ERROR: Job failed: exit code 1\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "corpus.jsonl").write_text(
+        "".join(
+            json.dumps(
+                {
+                    "id": case_id,
+                    "failure_class": "test",
+                    "expected_rule": "runner.no-space",
+                    "exit_code": 1,
+                    "evidence_marker": "ERESOLVE",
+                    "trace": "traces/one.log",
+                    "provenance": "observed",
+                    "notes": "synthetic",
+                }
+            )
+            + "\n"
+            for case_id in case_ids
+        ),
+        encoding="utf-8",
+    )
+    return tmp_path
+
+
+def test_a_long_id_widens_the_column_rather_than_skewing_its_neighbours(
+    tmp_path: Path,
+) -> None:
+    """The width was hardcoded to 34; an id past that used to push its row out.
+
+    Two rows are the point: with one, nothing is visibly misaligned. The
+    corpus's longest id is 29 today, so the real report cannot catch this.
+    """
+    short, long = "short-id", "a-deliberately-very-long-corpus-case-identifier"
+    assert len(long) > 34 > len(short)
+    text = format_report(run_eval(_corpus_with_ids(tmp_path, short, long)))
+    starts = {
+        2 + len(match.group(1)) + len(match.group(2))
+        for match in (re.match(r"  (\S+)( +)expected", line) for line in text.splitlines())
+        if match
+    }
+    assert len(starts) == 1, f"the two rows start their second column at {sorted(starts)}"
+
+
+def test_misses_and_gaps_share_one_column_width(tmp_path: Path) -> None:
+    """The two blocks are read together, so they are measured together."""
+    text = format_report(REPORT)
+    listed = {r.case.id for r in REPORT.misses + REPORT.gaps}
+    starts = set()
+    for line in text.splitlines():
+        match = re.match(r"  (\S+)( +)\S", line)
+        if match and match.group(1) in listed:
+            starts.add(2 + len(match.group(1)) + len(match.group(2)))
+    assert len(starts) == 1, f"ragged id column: {sorted(starts)}"

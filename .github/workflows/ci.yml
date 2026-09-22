@@ -19,19 +19,27 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      # Every step below goes through the Makefile, which invokes each tool as
+      # `python -m <tool>`. A bare `pytest` or `mypy` on PATH can belong to a
+      # different environment than the package is installed into, and CI is the
+      # worst place to debug that. It also keeps `make check` honest: these are
+      # literally the targets it runs.
       - name: Install
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          make install PYTHON=python
 
-      - name: Lint
-        run: ruff check src tests
-
-      - name: Format check
-        run: ruff format --check src tests
+      - name: Lint and format check
+        run: make lint PYTHON=python
 
       - name: Typecheck
-        run: mypy
+        run: make typecheck PYTHON=python
 
       - name: Test
-        run: pytest --cov=pipelinemd --cov-report=term-missing
+        run: make test PYTHON=python PYTEST_ARGS="--cov=pipelinemd --cov-report=term-missing"
+
+      # The regression gate. Offline and deterministic, so it costs a few
+      # seconds and nothing else. Without this step --min-rule-accuracy is a
+      # flag nobody runs, and the eval is a report rather than a guard.
+      - name: Eval gate
+        run: make gate PYTHON=python

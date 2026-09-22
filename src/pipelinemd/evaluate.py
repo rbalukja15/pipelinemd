@@ -43,8 +43,8 @@ class CaseResult:
 
     @property
     def rule_correct(self) -> bool:
-        """The expected rule ranked first. Unlabelled cases are never correct."""
-        return self.case.expected_rule is not None and self.rank == 1
+        """The expected rule ranked first. Gap cases are never correct."""
+        return self.case.expects_rule and self.rank == 1
 
     @property
     def exit_code_correct(self) -> bool:
@@ -52,7 +52,19 @@ class CaseResult:
 
     @property
     def is_gap(self) -> bool:
-        return self.case.expected_rule is None
+        """No rule is expected to fire. Defined once, on the case itself."""
+        return not self.case.expects_rule
+
+    @property
+    def false_positive(self) -> bool:
+        """A gap case fired a rule anyway.
+
+        The catalog growing a confident wrong answer where it previously had
+        the good sense to stay silent is the most alarming thing this eval can
+        find, and it moves none of the three headline numbers - gap cases are
+        excluded from all of them. So it gets counted separately.
+        """
+        return self.is_gap and self.top_rule is not None
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,9 +75,6 @@ class ClassScore:
     rule_at_1: int
     evidence_hits: int
     exit_codes: int
-
-    def rate(self, hits: int, total: int) -> float:
-        return hits / total if total else 0.0
 
 
 def _rank_of(rule_id: str | None, fired: tuple[str, ...]) -> int | None:
@@ -110,6 +119,11 @@ class EvalReport:
     def misses(self) -> tuple[CaseResult, ...]:
         """Labelled cases where the expected rule did not rank first."""
         return tuple(r for r in self.labelled if not r.rule_correct)
+
+    @property
+    def gap_false_positives(self) -> tuple[CaseResult, ...]:
+        """Gap cases that fired a rule. Scored by nothing else; see above."""
+        return tuple(r for r in self.gaps if r.false_positive)
 
     def by_provenance(self) -> dict[str, int]:
         return dict(Counter(r.case.provenance for r in self.results))
@@ -199,21 +213,34 @@ def format_report(report: EvalReport) -> str:
         f"exit code {report.exit_code_accuracy:.1%}",
     ]
 
+    # Not part of the three rates - gap cases are excluded from all of them -
+    # so it would otherwise only appear as a line buried in the gaps section.
+    if report.gap_false_positives:
+        lines.append(
+            f"{len(report.gap_false_positives)} false positive(s) on known gaps "
+            "— a rule now fires where the catalog used to stay silent."
+        )
+
+    # Widest id in whichever rows we are about to print, so a long id pushes
+    # the column out instead of overflowing it and skewing its neighbours.
+    listed = report.misses + report.gaps
+    width = max((len(r.case.id) for r in listed), default=0)
+
     if report.misses:
         lines += ["", f"Misses ({len(report.misses)})"]
         for miss in report.misses:
             got = miss.top_rule or "nothing fired"
             rank = f"rank {miss.rank}" if miss.rank else "never fired"
             lines.append(
-                f"  {miss.case.id:<34} expected {miss.case.expected_rule} — got {got} ({rank})"
+                f"  {miss.case.id:<{width}} expected {miss.case.expected_rule} — got {got} ({rank})"
             )
 
     if report.gaps:
         lines += ["", f"Known gaps — no rule covers these ({len(report.gaps)})"]
         for gap in report.gaps:
             fired = gap.top_rule or "nothing fired"
-            note = "correctly silent" if gap.top_rule is None else f"FALSE POSITIVE: {fired}"
-            lines.append(f"  {gap.case.id:<34} {note}")
+            note = f"FALSE POSITIVE: {fired}" if gap.false_positive else "correctly silent"
+            lines.append(f"  {gap.case.id:<{width}} {note}")
 
     if all(r.case.provenance == "authored" for r in report.results):
         lines += [
@@ -236,6 +263,7 @@ def eval_report_to_dict(report: EvalReport) -> dict[str, object]:
             "exit_code_accuracy": round(report.exit_code_accuracy, 4),
             "labelled": len(report.labelled),
             "gaps": len(report.gaps),
+            "gap_false_positives": len(report.gap_false_positives),
         },
         "by_class": [
             {
@@ -263,7 +291,7 @@ def eval_report_to_dict(report: EvalReport) -> dict[str, object]:
                 "id": gap.case.id,
                 "failure_class": gap.case.failure_class,
                 "top_rule": gap.top_rule,
-                "false_positive": gap.top_rule is not None,
+                "false_positive": gap.false_positive,
             }
             for gap in report.gaps
         ],

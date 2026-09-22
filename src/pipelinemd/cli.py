@@ -35,7 +35,7 @@ EXIT_OK = 0
 EXIT_USAGE = 2
 EXIT_GITLAB = 3
 EXIT_NOTHING = 4
-#: Eval ran fine but scored below the floor the caller demanded.
+#: Eval ran fine but breached a gate the caller set.
 EXIT_BELOW_THRESHOLD = 5
 
 MAX_JOBS_DEFAULT = 1
@@ -204,6 +204,15 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         metavar="RATE",
         help="Exit non-zero if rule@1 falls below this (0-1); use as a regression gate.",
+    )
+    eval_parser.add_argument(
+        "--max-gap-false-positives",
+        type=int,
+        metavar="N",
+        help=(
+            "Exit non-zero if more than N known-gap cases fire a rule. "
+            "Gaps are excluded from every rate, so --min-rule-accuracy cannot see them."
+        ),
     )
     eval_parser.set_defaults(func=cmd_eval)
 
@@ -482,6 +491,16 @@ def cmd_rules(args: argparse.Namespace, stdout: IO[str], stderr: IO[str], stdin:
 
 
 def cmd_eval(args: argparse.Namespace, stdout: IO[str], stderr: IO[str], stdin: IO[str]) -> int:
+    # Validate the gates before doing the work: `--min-rule-accuracy 95`, from
+    # someone reading it as a percentage, used to run the whole corpus and then
+    # report "below the required 9500.0%", and `-1` silently always passed.
+    floor = args.min_rule_accuracy
+    if floor is not None and not 0.0 <= floor <= 1.0:
+        raise UsageError(f"--min-rule-accuracy takes a rate between 0 and 1, not {floor:g}.")
+    ceiling = args.max_gap_false_positives
+    if ceiling is not None and ceiling < 0:
+        raise UsageError(f"--max-gap-false-positives cannot be negative, got {ceiling}.")
+
     report = run_eval(Path(args.corpus) if args.corpus else None)
 
     if args.format == "json":
@@ -490,11 +509,21 @@ def cmd_eval(args: argparse.Namespace, stdout: IO[str], stderr: IO[str], stdin: 
         text = format_report(report)
     _write(text, args.output, stdout)
 
-    floor = args.min_rule_accuracy
+    # Report every breached gate, not just the first: one run should say
+    # everything that is wrong.
+    failed = False
     if floor is not None and report.rule_accuracy < floor:
         stderr.write(f"rule@1 {report.rule_accuracy:.1%} is below the required {floor:.1%}.\n")
-        return EXIT_BELOW_THRESHOLD
-    return EXIT_OK
+        failed = True
+    false_positives = len(report.gap_false_positives)
+    if ceiling is not None and false_positives > ceiling:
+        names = ", ".join(r.case.id for r in report.gap_false_positives)
+        stderr.write(
+            f"{false_positives} known-gap case(s) fired a rule, above the allowed "
+            f"{ceiling}: {names}.\n"
+        )
+        failed = True
+    return EXIT_BELOW_THRESHOLD if failed else EXIT_OK
 
 
 def cmd_explain(args: argparse.Namespace, stdout: IO[str], stderr: IO[str], stdin: IO[str]) -> int:

@@ -41,21 +41,21 @@ overall             60    47/53     60/60      60/60
 rule@1 88.7%  ·  evidence 100.0%  ·  exit code 100.0%
 
 Misses (6)
-  cache-s3-credentials               expected ci.cache-failed — got aws.no-credentials (rank 2)
-  test-jest-snapshot                 expected test.jest-failed — got test.pytest-failed (rank 2)
-  flaky-external-api-timeout         expected net.connection-refused — got nothing fired (never fired)
-  flaky-runner-lost                  expected runner.system-failure — got docker.daemon-unreachable (rank 2)
-  flaky-test-passes-on-retry         expected test.jest-failed — got test.pytest-failed (rank 2)
-  flaky-apt-mirror-unreachable       expected net.connection-refused — got nothing fired (never fired)
+  cache-s3-credentials          expected ci.cache-failed — got aws.no-credentials (rank 2)
+  test-jest-snapshot            expected test.jest-failed — got test.pytest-failed (rank 2)
+  flaky-external-api-timeout    expected net.connection-refused — got nothing fired (never fired)
+  flaky-runner-lost             expected runner.system-failure — got docker.daemon-unreachable (rank 2)
+  flaky-test-passes-on-retry    expected test.jest-failed — got test.pytest-failed (rank 2)
+  flaky-apt-mirror-unreachable  expected net.connection-refused — got nothing fired (never fired)
 
 Known gaps — no rule covers these (7)
-  yaml-yamllint-indentation          correctly silent
-  yaml-empty-variable-expansion      correctly silent
-  artifact-too-large                 correctly silent
-  test-rspec-failure                 correctly silent
-  test-vitest-failure                correctly silent
-  test-phpunit-failure               correctly silent
-  flaky-gitlab-502                   correctly silent
+  yaml-yamllint-indentation     correctly silent
+  yaml-empty-variable-expansion correctly silent
+  artifact-too-large            correctly silent
+  test-rspec-failure            correctly silent
+  test-vitest-failure           correctly silent
+  test-phpunit-failure          correctly silent
+  flaky-gitlab-502              correctly silent
 
 Every case is authored, not observed. These numbers are a regression
 signal, not a measurement of real-world accuracy — see corpus/README.md.
@@ -122,12 +122,34 @@ which wants an accuracy table in the README, and should wait for observed data.
 ## Running it
 
 ```bash
-make eval                                  # the table above
-pipelinemd eval --format json              # same numbers, machine-readable
-pipelinemd eval --min-rule-accuracy 0.85   # exit 5 if it regresses below the floor
-pipelinemd eval --corpus path/to/other     # score a different corpus
+make eval                                   # the table above
+make gate                                   # the same run, with CI's thresholds
+pipelinemd eval --format json               # same numbers, machine-readable
+pipelinemd eval --min-rule-accuracy 0.85    # exit 5 if rule@1 regresses
+pipelinemd eval --max-gap-false-positives 0 # exit 5 if a gap starts firing
+pipelinemd eval --corpus path/to/other      # score a different corpus
 ```
 
-The `--min-rule-accuracy` gate is what makes this a guard rather than a report:
-wire it into CI once observed cases land and a catalog regression fails the
-build instead of being noticed later.
+## The gate
+
+`make gate` runs on every push, as the last step of CI. Without it
+`--min-rule-accuracy` would be a flag nobody runs, and everything above would
+be a report rather than a guard.
+
+Two thresholds, set in the [Makefile](../Makefile):
+
+**`MIN_RULE_ACCURACY = 0.85`.** rule@1 is 47/53 = 88.7% today, so 0.85 is 45/53
+— the build fails on the third regression, not the first. The slack is
+deliberate. The corpus is meant to grow with `observed` traces, which will be
+harder than the authored ones, and a gate that goes red when someone commits a
+real failing log discourages exactly the contribution this project most needs.
+The cost is real and worth stating: a single rule breaking one case will not
+fail the build. It is still visible — `make eval` names every miss, and this
+document lists them — it just does not stop a merge on its own. Tighten the
+floor once the corpus stops moving.
+
+**`MAX_GAP_FALSE_POSITIVES = 0`.** Known gaps are excluded from every rate, so
+a rule that starts firing on one moves *no number at all* — `--min-rule-accuracy`
+cannot see it. It is also the worst thing the catalog can do: producing a
+confident wrong answer where it previously had the good sense to stay silent.
+All seven gaps are correctly silent today, and that is gated exactly.
