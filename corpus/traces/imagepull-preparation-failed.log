@@ -1,0 +1,9 @@
+[0KRunning with gitlab-runner 16.11.0 (91a27b2a)[0;m
+[0;m  on green-4.shared.runners-manager J2xYzQpL, system ID: s_88c1[0;m
+section_start:1700000000:resolve_secrets[collapsed=true][0K[36;1mResolving secrets[0;m
+section_end:1700000001:resolve_secrets[0K
+section_start:1700000001:prepare_executor[collapsed=true][0K[36;1mPreparing the "docker" executor[0;m
+[0;m Using Docker executor with image registry.acme.internal/ci/python:3.12 ...[0;m
+[0;m Using docker image sha256:9f2b1c for registry.acme.internal/ci/python:3.12 ...[0;m
+ERROR: Preparation failed: failed to pull image "registry.acme.internal/ci/python:3.12" with specified policies [always]: Error response from daemon: unauthorized: authentication required
+[31;1mERROR: Job failed: exit code 1[0;m

@@ -1,0 +1,9 @@
+[0KRunning with gitlab-runner 16.11.0 (91a27b2a)[0;m
+[0;m  on green-4.shared.runners-manager J2xYzQpL, system ID: s_88c1[0;m
+section_start:1700000000:resolve_secrets[collapsed=true][0K[36;1mResolving secrets[0;m
+section_end:1700000001:resolve_secrets[0K
+section_start:1700000001:prepare_executor[collapsed=true][0K[36;1mPreparing the "docker" executor[0;m
+[0;m Using Docker executor with image node:20-alpine ...[0;m
+[0;m Using docker image sha256:9f2b1c for node:20-alpine ...[0;m
+ERROR: Job failed (system failure): Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?
+[31;1mERROR: Job failed: exit code 1[0;m
