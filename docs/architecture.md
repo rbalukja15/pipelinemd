@@ -75,14 +75,22 @@ job. Four mechanisms address it:
   happened *because* the job already failed, so it is scored down 45 points and
   cannot outrank a hit in `step_script`. Without this, "artifact upload found no
   matching files" outranks the npm error that caused it.
-- **The quoted-verdict penalty.** `ERROR: Job failed (system failure): Cannot
-  connect to the Docker daemon` is the runner concluding, then quoting. A rule
-  matching at the start of that line is adjudicating the job; one matching
-  inside it is describing what was quoted, and is scored down 25 points. The
-  docker daemon there is the *runner's*, and the job never started, so "fix
-  your docker setup" is advice about the wrong machine. The quoted rule is
-  demoted rather than suppressed — it is the useful detail, just not the
-  answer.
+- **The verdict adjustment.** `ERROR: Job failed (system failure): …` is the
+  runner concluding, then quoting. Matching inside the quote rather than at the
+  start of it says a rule is describing what was quoted — but that alone does
+  not say whether the quote is the answer. What settles it is whose machine the
+  rule's advice targets, which the catalog already records as a category:
+
+  | verdict quotes | quoted rule | advice aimed at | outcome |
+  | --- | --- | --- | --- |
+  | `Cannot connect to the Docker daemon` | `docker.daemon-unreachable` | the job's CI config (`services: [docker:dind]`) | −25, demoted to rank 2 |
+  | `no space left on device` | `runner.no-space` (`resources`) | the runner host (`df -h`, `docker system prune`) | +10, outranks the verdict |
+
+  `runner.system-failure` is a container — its own first fix reads "read the
+  line right before this one". When a `runner`- or `resources`-scoped rule
+  names that line, it beats the container outright rather than tying with it.
+  Anything else is demoted rather than suppressed: it is the useful detail,
+  just not the answer.
 - **The model.** Rules cannot tell which of two genuine errors is upstream of
   the other. That judgement is the one thing the LLM layer is asked for, and the
   prompt says so explicitly.

@@ -115,15 +115,30 @@ ERROR: Job failed (system failure): Cannot connect to the Docker daemon
 Both rules match that line, both are HIGH confidence, and the tie broke
 alphabetically — so `docker.daemon-unreachable` won.
 
-The engine now applies a `QUOTED_VERDICT_PENALTY` to a rule matching *inside*
-the runner's own `ERROR: Job failed` verdict rather than at the start of it.
-The runner's conclusion is about the whole job; what follows is the runner
-quoting something. Here the docker daemon is the *runner's*, and the job never
-started, so "fix your docker setup" is advice about the wrong machine.
+The engine now adjusts a rule matching *inside* the runner's own
+`ERROR: Job failed` verdict rather than at the start of it. Here the docker
+daemon is the *runner's*, the job never started, and
+`docker.daemon-unreachable`'s advice is about the job's CI config — the wrong
+machine — so it is demoted 25 points.
 
-`docker.daemon-unreachable` is demoted, not suppressed — it stays at rank 2,
-because it is the useful detail. The same message inside the job's own script
-is untouched and still ranks first.
+**Review caught that offset alone is the wrong test**, and the first cut of
+this got it wrong in the opposite direction:
+
+```
+ERROR: Job failed (system failure): no space left on device
+```
+
+`runner.no-space` also matches inside the quote, but its advice (`df -h`,
+`docker system prune`) is aimed squarely at the runner host — the right machine
+— while `runner.system-failure`'s own first fix reads *"read the line right
+before this one"*. Demoting it would have been the same confident wrong answer
+in reverse. So the adjustment is signed: a `runner`- or `resources`-scoped rule
+quoted in a verdict gains 10 points and beats the container outright, rather
+than tying with it and winning on an alphabetical tie-break.
+
+Either way the loser is demoted, not suppressed — it stays at rank 2, because
+it is the useful detail. The same message inside the job's own script is
+untouched and still ranks first.
 
 ### Fixed: a cache credential that read as the job's AWS credential
 

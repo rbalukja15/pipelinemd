@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 
 import pytest
 
 from pipelinemd.distill import distill
-from pipelinemd.rules import match_rules
+from pipelinemd.rules import get_rule, match_rules
 
 # The whole point of the tool, expressed as a table.
 EXPECTED_TOP_RULE = {
@@ -232,3 +233,78 @@ def test_a_genuine_aws_access_denial_still_fires() -> None:
         )
     )
     assert ranked[0] == "aws.no-credentials"
+
+
+# ---------------------------------------------------------------------------
+# Review of #42: the first cut of the quoted-verdict rule keyed on offset
+# alone, which demoted the actionable rule whenever the quoted text named a
+# fault on the machine that genuinely needed fixing.
+# ---------------------------------------------------------------------------
+
+
+def _system_failure(reason: str) -> str:
+    return (
+        "Running with gitlab-runner 16.11.0 (abc)\n"
+        'section_start:1700000001:prepare_executor\x1b[0KPreparing the "docker" executor\n'
+        f"ERROR: Job failed (system failure): {reason}\n"
+        "ERROR: Job failed: exit code 1\n"
+    )
+
+
+def test_a_named_cause_outranks_the_container_that_quotes_it() -> None:
+    """`runner.system-failure` is a container; its own first fix says so.
+
+    "Read the line right before this one - it names the underlying failure."
+    When a rule *is* that underlying failure, and its advice points at the
+    runner's own host, it is strictly the better answer - and it must win on
+    score, not on an alphabetical tie-break it happens to be on the right side
+    of today.
+    """
+    hits = match_rules(distill(_system_failure("no space left on device")))
+    ranked = [hit.rule.id for hit in hits]
+    assert ranked[0] == "runner.no-space"
+    assert ranked[1] == "runner.system-failure"
+    assert hits[0].score > hits[1].score, "must not depend on the id tie-break"
+
+
+def test_a_quoted_cause_aimed_at_the_wrong_machine_is_still_demoted() -> None:
+    """The other side of the same rule, so the two cannot drift apart."""
+    ranked = [
+        hit.rule.id
+        for hit in match_rules(
+            distill(
+                _system_failure(
+                    "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. "
+                    "Is the docker daemon running?"
+                )
+            )
+        )
+    ]
+    assert ranked[0] == "runner.system-failure"
+    assert ranked[1] == "docker.daemon-unreachable"
+
+
+def test_the_curl_refusal_pattern_matches_what_curl_actually_prints() -> None:
+    """curl capitalises `Failed`; the pattern did not, and never matched it.
+
+    The refusal case passed anyway, off `Connection refused` at the tail of the
+    same line - so the pattern looked load-bearing while doing nothing.
+    """
+    pattern = next(p for p in get_rule("net.connection-refused").patterns if "connect to" in p)
+    line = "curl: (7) Failed to connect to localhost port 5432 after 2 ms: Connection refused"
+    assert re.compile(pattern, re.MULTILINE).search(line)
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        # No `curl: (28)` tell, so only the case-insensitive phrase can catch it.
+        "wget: unable to connect to api.example.com:443: Connection Timed Out",
+        "java.net.SocketTimeoutException: Read Timed Out",
+    ],
+)
+def test_a_capitalised_timeout_is_still_a_timeout(line: str) -> None:
+    """JVM and Windows tooling title-case it; the guard was case-sensitive."""
+    ranked = [hit.rule.id for hit in match_rules(distill(_job(line)))]
+    assert "net.connection-timeout" in ranked
+    assert "net.connection-refused" not in ranked

@@ -1211,12 +1211,12 @@ CLOUD_NETWORK_RULES: tuple[Rule, ...] = (
             r"[Cc]onnection refused",
             r"\bECONNREFUSED\b",
             r"[Cc]onnection reset by peer",
-            r"failed to connect to \S+ port",
+            r"(?i:failed to connect to \S+ port)",
         ),
         # A refusal is an answer; a timeout is silence. curl prints both through
         # "Failed to connect to <host> port", so keep them apart - the fixes
         # below are wrong for a timeout.
-        excludes=(r"timed out",),
+        excludes=(r"(?i:timed out)",),
         confidence=Confidence.MEDIUM,
         explanation=(
             "Nothing was listening at the address, or the connection was dropped. When the "
@@ -1235,13 +1235,13 @@ CLOUD_NETWORK_RULES: tuple[Rule, ...] = (
         title="Connection timed out",
         category=Category.NETWORK,
         patterns=(
-            r"[Cc]onnection timed out",
-            r"Operation timed out after \d+ milliseconds",
+            r"(?i:connection timed out)",
+            r"(?i:operation timed out)",
             r"curl: \(28\)",
             r"\bETIMEDOUT\b",
             r"\bi/o timeout\b",
-            r"Read timed out",
-            r"[Tt]imeout was reached",
+            r"(?i:read timed out)",
+            r"(?i:timeout was reached)",
         ),
         exit_codes=(28,),
         confidence=Confidence.MEDIUM,
