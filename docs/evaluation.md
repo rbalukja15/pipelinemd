@@ -28,25 +28,17 @@ pipelinemd eval — 60 cases (60 authored)
 
 class            cases   rule@1  evidence  exit code
 ---------------- ----- -------- --------- ----------
-cache_artifact       8      6/7       8/8        8/8
+cache_artifact       8      7/7       8/8        8/8
 ci_vars              8      8/8       8/8        8/8
-flaky                9      4/8       9/9        9/9
+flaky                9      8/8       9/9        9/9
 image_pull           9      9/9       9/9        9/9
 runner               9      9/9       9/9        9/9
-test                 9      5/6       9/9        9/9
+test                 9      6/6       9/9        9/9
 yaml                 8      6/6       8/8        8/8
 ---------------- ----- -------- --------- ----------
-overall             60    47/53     60/60      60/60
+overall             60    53/53     60/60      60/60
 
-rule@1 88.7%  ·  evidence 100.0%  ·  exit code 100.0%
-
-Misses (6)
-  cache-s3-credentials          expected ci.cache-failed — got aws.no-credentials (rank 2)
-  test-jest-snapshot            expected test.jest-failed — got test.pytest-failed (rank 2)
-  flaky-external-api-timeout    expected net.connection-refused — got nothing fired (never fired)
-  flaky-runner-lost             expected runner.system-failure — got docker.daemon-unreachable (rank 2)
-  flaky-test-passes-on-retry    expected test.jest-failed — got test.pytest-failed (rank 2)
-  flaky-apt-mirror-unreachable  expected net.connection-refused — got nothing fired (never fired)
+rule@1 100.0%  ·  evidence 100.0%  ·  exit code 100.0%
 
 Known gaps — no rule covers these (7)
   yaml-yamllint-indentation     correctly silent
@@ -61,50 +53,125 @@ Every case is authored, not observed. These numbers are a regression
 signal, not a measurement of real-world accuracy — see corpus/README.md.
 ```
 
-## What the first run found
+## What the first run found, and what fixing it did
 
-The catalog was **not** tuned in response to any of this. Tuning rules until the
-number improves, in the same change that introduces the measurement, would make
-the first figure meaningless. These are recorded as findings to fix
-deliberately and separately, so the eval can show the improvement.
+The harness was merged without tuning the catalog, on purpose: tuning rules
+until the number improves, in the same change that introduces the measurement,
+would have made the first figure meaningless. The four findings were written
+down instead, and fixed separately. This is that separate fix, and the eval is
+what says it worked:
 
-### False positive: the pytest rule fires on Jest output
+| | rule@1 |
+| --- | --- |
+| First run (#22) | 47/53 — 88.7% |
+| Three findings fixed, no labels touched | 51/53 — 96.2% |
+| Fourth finding, which needed a label correction | 53/53 — 100.0% |
 
-`test-jest-snapshot` and `flaky-test-passes-on-retry` both resolve to
-`test.pytest-failed` rather than `test.jest-failed`. The pytest rule matches
-`\b\d+ failed(?:,| \b)`, and Jest prints `Tests:       1 failed, 511 passed`
-— so a rule named for one framework outranks the rule named for the other on
-that framework's own output. Two misses, one cause.
+Each fix is a regression test in `tests/test_engine.py` that fails against the
+previous catalog.
 
-### Coverage gaps: timeouts phrased as timeouts
+### Fixed: the pytest rule claimed Jest's output
 
-`flaky-external-api-timeout` (curl: `Operation timed out after 30001
-milliseconds`) and `flaky-apt-mirror-unreachable` (apt: `Could not connect to
-deb.debian.org:80 … connection timed out`) fire **nothing at all**.
-`net.connection-refused` covers refusals and resets but not a connection that
-simply never completed, which is the more common transient failure of the two.
+`test.pytest-failed` matched `\b\d+ failed(?:,| \b)` — generic enough for
+pytest's summary bar, and also a match for Jest's `Tests:  1 failed, 511
+passed`. A rule named for one framework outranked the rule named for the other
+on that framework's own output. Two of the six misses, one cause, and a real
+false positive users would have hit.
 
-### Ranking: a system failure that reads as a docker failure
+Fixed by excluding Jest's own summary labels from that pattern rather than by
+narrowing it: pytest's bar genuinely is that generic, and the thing that made
+it wrong was the label in front of it.
 
-`flaky-runner-lost` resolves to `docker.daemon-unreachable` even though the
-trace opens with `ERROR: Job failed (system failure)`. Both rules genuinely
-match; the more specific one loses. The runner's own verdict should outweigh a
-message quoted inside it.
+### Fixed: nothing fired on a connection that timed out
 
-### Arguably my label, not the rule
+`net.connection-refused` covered refusals and resets but not a connection that
+simply never completed — the more common transient failure of the two. Both
+timeout cases fired **nothing at all**.
 
-`cache-s3-credentials` expects `ci.cache-failed` and gets `aws.no-credentials`,
-because the trace contains `AccessDenied`. It is a defensible answer — but the
-failing credential belongs to the *runner's cache backend*, not the job's AWS
-client, so `aws.no-credentials`' advice would send someone to the wrong place.
-Left as a miss rather than relabelled.
+There is now a `net.connection-timeout` rule. Refusals and timeouts are kept
+apart deliberately, including an exclusion on the refusal rule, because curl
+reports both through `Failed to connect to <host> port` and the advice differs:
+a refusal means something is closed, a timeout means the packets went nowhere.
 
-### Declared gaps
+**This finding needed a label correction, and that is worth stating plainly.**
+Both cases were labelled `net.connection-refused`, which was wrong on the facts
+— neither trace contains a refusal. One case's note already said so at
+authoring time: *"net.connection-refused is the closest rule but imprecise."*
+Correcting it to the new rule moves rule@1 from 96.2% to 100%, so **two of the
+six original misses were resolved by fixing the corpus rather than the
+catalog**. The other three were fixed on the merits with no label touched.
 
-Seven cases carry `expected_rule: null` because no rule covers them — RSpec,
-Vitest and PHPUnit output, artifact size limits, a git `502`, a yamllint error,
-an empty variable expansion. All seven are **correctly silent**: no rule
-misfires on them. They are in the corpus so this section has something to say.
+The line held here: a label may be corrected when it was wrong about the
+failure, never when it is merely inconvenient. `cache-s3-credentials` below is
+the case that tested it.
+
+### Fixed: a system failure that read as a docker failure
+
+```
+ERROR: Job failed (system failure): Cannot connect to the Docker daemon
+^--- runner.system-failure              ^--- docker.daemon-unreachable
+```
+
+Both rules match that line, both are HIGH confidence, and the tie broke
+alphabetically — so `docker.daemon-unreachable` won.
+
+The engine now adjusts a rule matching *inside* the runner's own
+`ERROR: Job failed` verdict rather than at the start of it. Here the docker
+daemon is the *runner's*, the job never started, and
+`docker.daemon-unreachable`'s advice is about the job's CI config — the wrong
+machine — so it is demoted 25 points.
+
+**Review caught that offset alone is the wrong test**, and the first cut of
+this got it wrong in the opposite direction:
+
+```
+ERROR: Job failed (system failure): no space left on device
+```
+
+`runner.no-space` also matches inside the quote, but its advice (`df -h`,
+`docker system prune`) is aimed squarely at the runner host — the right machine
+— while `runner.system-failure`'s own first fix reads *"read the line right
+before this one"*. Demoting it would have been the same confident wrong answer
+in reverse. So the adjustment is signed: a `runner`- or `resources`-scoped rule
+quoted in a verdict gains 10 points and beats the container outright, rather
+than tying with it and winning on an alphabetical tie-break.
+
+Either way the loser is demoted, not suppressed — it stays at rank 2, because
+it is the useful detail. The same message inside the job's own script is
+untouched and still ranks first.
+
+### Fixed: a cache credential that read as the job's AWS credential
+
+`cache-s3-credentials` resolved to `aws.no-credentials`, because
+`WARNING: Retrieving cache from S3 failed: AccessDenied` contains
+`AccessDenied`. Defensible, and still wrong: that credential belongs to the
+runner's distributed cache, configured in `[runners.cache]`, not to anything
+the job sets — so the rule's advice ("check `AWS_ACCESS_KEY_ID`, check the IAM
+policy") pointed at the wrong machine, exactly as above.
+
+This is the case where relabelling would have been easy and wrong. The label
+`ci.cache-failed` was *correct* — the cache did fail — so the fix belonged in
+the catalog: `aws.no-credentials` now excludes the runner's cache-transfer
+lines, `ci.cache-failed` matches the line that names the backend and the
+reason, and its advice now says where to actually look. A genuine job-side
+`AccessDenied` still fires `aws.no-credentials`.
+
+A dedicated `ci.cache-auth-failed` rule would be better still, but adding it
+would require relabelling this case in the same change, which is the thing this
+document exists to avoid. Left as a follow-up.
+
+### Declared gaps: unchanged
+
+Seven cases carry `expected_rule: null`, and all seven are still **correctly
+silent**. Nothing added here misfires on them — including the new timeout rule,
+which does not claim `flaky-gitlab-502`. `make gate` enforces that at zero.
+
+### What 100% does not mean
+
+It means the catalog answers every labelled case in an authored corpus
+correctly. It does not mean the tool is right in the wild, and the number will
+drop the first time a real trace lands — which is the intended direction of
+travel, not a regression. See below.
 
 ## Reading the number honestly
 
@@ -138,15 +205,20 @@ be a report rather than a guard.
 
 Two thresholds, set in the [Makefile](../Makefile):
 
-**`MIN_RULE_ACCURACY = 0.85`.** rule@1 is 47/53 = 88.7% today, so 0.85 is 45/53
-— the build fails on the third regression, not the first. The slack is
-deliberate. The corpus is meant to grow with `observed` traces, which will be
-harder than the authored ones, and a gate that goes red when someone commits a
-real failing log discourages exactly the contribution this project most needs.
-The cost is real and worth stating: a single rule breaking one case will not
-fail the build. It is still visible — `make eval` names every miss, and this
-document lists them — it just does not stop a merge on its own. Tighten the
-floor once the corpus stops moving.
+**`MIN_RULE_ACCURACY = 0.92`.** Raised from 0.85 now that rule@1 is 53/53: 0.92
+is 49/53, so the build fails on the fifth regression. The headroom is still
+deliberate, for the same reason as before — the corpus is meant to grow with
+`observed` traces, which will be harder than the authored ones, and a gate that
+goes red the moment someone commits a real failing log discourages the
+contribution this project most needs.
+
+The cost is real and worth stating: four broken cases will not fail the build.
+They stay visible — `make eval` names every miss — they just do not stop a
+merge on their own, and the per-case regression tests in
+`tests/test_engine.py` catch the specific behaviours that matter. Adding hard
+traces will eventually push the rate under this floor; the right response is to
+lower it in a commit that says why, so the number moves in review rather than
+silently.
 
 **`MAX_GAP_FALSE_POSITIVES = 0`.** Known gaps are excluded from every rate, so
 a rule that starts firing on one moves *no number at all* — `--min-rule-accuracy`

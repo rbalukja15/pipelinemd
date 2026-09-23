@@ -24,7 +24,7 @@ local file ─┘                                                     │       
 | `distill/redact.py` | Mask credential shapes. Line-count preserving. |
 | `distill/trace.py` | Sections, timestamps, metadata, per-line attribution. |
 | `distill/extract.py` | Score lines, grow windows, spend the budget, collapse repeats. |
-| `rules/catalog.py` | 58 failure signatures with fixes. Data, not code. |
+| `rules/catalog.py` | 59 failure signatures with fixes. Data, not code. |
 | `rules/engine.py` | Apply the catalog, rank the hits. |
 | `diagnose/prompt.py` | Build the request. Owns the JSON schema. |
 | `diagnose/citations.py` | Resolve the line numbers a diagnosis cited back to real evidence lines. |
@@ -64,7 +64,8 @@ bottom repeats it.
 ## Cause versus fallout
 
 The hardest part of reading a CI log is that a single fault produces many
-error-shaped lines. Three mechanisms address it:
+error-shaped lines — and that some of them describe the runner rather than the
+job. Four mechanisms address it:
 
 - **Dampeners.** `0 failed, 512 passed` uses failure vocabulary to report
   success. Five dampener patterns subtract from such lines so they do not
@@ -74,6 +75,22 @@ error-shaped lines. Three mechanisms address it:
   happened *because* the job already failed, so it is scored down 45 points and
   cannot outrank a hit in `step_script`. Without this, "artifact upload found no
   matching files" outranks the npm error that caused it.
+- **The verdict adjustment.** `ERROR: Job failed (system failure): …` is the
+  runner concluding, then quoting. Matching inside the quote rather than at the
+  start of it says a rule is describing what was quoted — but that alone does
+  not say whether the quote is the answer. What settles it is whose machine the
+  rule's advice targets, which the catalog already records as a category:
+
+  | verdict quotes | quoted rule | advice aimed at | outcome |
+  | --- | --- | --- | --- |
+  | `Cannot connect to the Docker daemon` | `docker.daemon-unreachable` | the job's CI config (`services: [docker:dind]`) | −25, demoted to rank 2 |
+  | `no space left on device` | `runner.no-space` (`resources`) | the runner host (`df -h`, `docker system prune`) | +10, outranks the verdict |
+
+  `runner.system-failure` is a container — its own first fix reads "read the
+  line right before this one". When a `runner`- or `resources`-scoped rule
+  names that line, it beats the container outright rather than tying with it.
+  Anything else is demoted rather than suppressed: it is the useful detail,
+  just not the answer.
 - **The model.** Rules cannot tell which of two genuine errors is upstream of
   the other. That judgement is the one thing the LLM layer is asked for, and the
   prompt says so explicitly.

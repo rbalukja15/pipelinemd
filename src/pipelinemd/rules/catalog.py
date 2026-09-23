@@ -826,7 +826,14 @@ TEST_BUILD_RULES: tuple[Rule, ...] = (
             r"\b\d+ failed(?:,| \b)",
             r"^FAILED \S+::",
         ),
-        excludes=(r"\b0 failed\b",),
+        excludes=(
+            r"\b0 failed\b",
+            # `\d+ failed,` is generic enough to catch pytest's summary bar, and
+            # Jest's own summary reads `Tests:  1 failed, 511 passed`. Without
+            # this, the rule named for one framework outranks the rule named for
+            # the other on that framework's output - a confident wrong answer.
+            r"^\s*(?:Tests|Test Suites|Snapshots):",
+        ),
         confidence=Confidence.HIGH,
         explanation=(
             "The job failed because tests failed, not because the environment is broken. The "
@@ -1009,17 +1016,24 @@ CONFIG_RULES: tuple[Rule, ...] = (
             r"Failed to extract cache",
             r"WARNING: Cache file does not exist",
             r"Failed to (?:create|download) cache",
+            # The runner names the backend and the reason on this line, so it is
+            # more useful evidence than the "Failed to extract cache" that
+            # follows it.
+            r"(?:Retrieving|Uploading|Downloading) cache from \S+ failed",
         ),
         confidence=Confidence.LOW,
         explanation=(
             "The runner could not restore the cache. This is usually harmless on its own - the "
             "job just rebuilds from scratch - but it is a real failure if a later step assumes "
-            "the cache exists."
+            "the cache exists. When the line names a backend (S3, GCS) and an access error, the "
+            "credential at fault is the runner's cache credential, configured in the runner's "
+            "own config - not a variable the job sets."
         ),
         fixes=(
             "A missing cache on the first run of a new `cache: key` is expected.",
             "Never let a job depend on cache contents for correctness; caches are best-effort.",
-            "For distributed caching, verify the runner's S3/GCS cache credentials and bucket.",
+            "On AccessDenied/403 from S3 or GCS, fix the runner's cache credentials and bucket "
+            "policy in `[runners.cache]`; the job's own AWS variables are not used for this.",
         ),
         docs=(_CACHE_DOCS,),
     ),
@@ -1100,6 +1114,14 @@ CLOUD_NETWORK_RULES: tuple[Rule, ...] = (
             r"ExpiredToken",
             r"The security token included in the request is (?:invalid|expired)",
             r"AccessDenied(?:Exception)?\b",
+        ),
+        excludes=(
+            # The runner prints its own cache-backend errors in this shape. That
+            # credential belongs to the runner's distributed cache, not to the
+            # job's AWS client, so this rule's advice - check AWS_ACCESS_KEY_ID,
+            # check the IAM policy - would send someone to the wrong place.
+            # ci.cache-failed covers it and says where to actually look.
+            r"(?:Retrieving|Uploading|Downloading) cache from \S+ failed",
         ),
         confidence=Confidence.HIGH,
         explanation=(
@@ -1189,8 +1211,12 @@ CLOUD_NETWORK_RULES: tuple[Rule, ...] = (
             r"[Cc]onnection refused",
             r"\bECONNREFUSED\b",
             r"[Cc]onnection reset by peer",
-            r"failed to connect to \S+ port",
+            r"(?i:failed to connect to \S+ port)",
         ),
+        # A refusal is an answer; a timeout is silence. curl prints both through
+        # "Failed to connect to <host> port", so keep them apart - the fixes
+        # below are wrong for a timeout.
+        excludes=(r"(?i:timed out)",),
         confidence=Confidence.MEDIUM,
         explanation=(
             "Nothing was listening at the address, or the connection was dropped. When the "
@@ -1202,6 +1228,39 @@ CLOUD_NETWORK_RULES: tuple[Rule, ...] = (
             "Reach services by their alias hostname (`postgres`, `redis`), not `localhost`, "
             "unless the runner uses the shell executor.",
             "Confirm the port matches what the service actually exposes.",
+        ),
+    ),
+    Rule(
+        id="net.connection-timeout",
+        title="Connection timed out",
+        category=Category.NETWORK,
+        patterns=(
+            r"(?i:connection timed out)",
+            r"(?i:operation timed out)",
+            r"curl: \(28\)",
+            r"\bETIMEDOUT\b",
+            r"\bi/o timeout\b",
+            r"(?i:read timed out)",
+            r"(?i:timeout was reached)",
+        ),
+        exit_codes=(28,),
+        confidence=Confidence.MEDIUM,
+        explanation=(
+            "The connection was never answered - the packets went nowhere rather than being "
+            "refused. That points at the path (egress firewall, proxy, DNS resolving to an "
+            "unreachable address) or at an upstream that is up but too slow, not at a service "
+            "that is down. It is the most common transient CI failure, and the one most often "
+            "misread as a code problem."
+        ),
+        fixes=(
+            "Retry it: `retry: { max: 2, when: runner_system_failure }` for job-level flakes, "
+            "or a bounded retry loop around the one command that reaches out.",
+            "Raise the client's timeout if the upstream is simply slow (`curl --max-time`, "
+            "`pip --timeout`, `npm config set fetch-timeout`).",
+            "If it reproduces every run, it is not flaky: check egress rules, `HTTP(S)_PROXY`, "
+            "and whether the runner's network can reach that host at all.",
+            "Prefer an internal mirror for package indexes - deb.debian.org and registry.npmjs.org "
+            "are the usual casualties.",
         ),
     ),
     Rule(
