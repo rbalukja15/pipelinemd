@@ -26,7 +26,7 @@ from .distill.extract import DEFAULT_MAX_LINES, DEFAULT_TAIL_LINES, DEFAULT_THRE
 from .errors import DiagnosisError, GitLabError, PipelinemdError, UsageError
 from .evaluate import eval_report_to_dict, format_report, run_eval
 from .gitlab import GitLabClient, Target, parse_target, rebase, target_from_parts
-from .models import JobRef, Report
+from .models import JobRef, Report, RetryHistory
 from .render import ColorChoice, make_style, render_markdown, render_terminal
 from .render.json_out import report_to_dict
 from .rules import ALL_RULES, get_rule, match_rules
@@ -344,6 +344,39 @@ def _maybe_diagnose(
     return replace(report, diagnosis=diagnosis)
 
 
+def _retry_history(
+    client: GitLabClient,
+    project: str,
+    pipeline_id: int | None,
+    job: dict[str, Any],
+    cache: dict[int, list[dict[str, Any]]],
+    stderr: IO[str],
+) -> RetryHistory | None:
+    """Every attempt of this job in its pipeline, oldest first.
+
+    One request per pipeline, however many of its jobs are diagnosed. A failure
+    here costs the flaky signal and nothing else: the rules and the diagnosis
+    do not depend on it, so it is noted rather than raised.
+    """
+    if pipeline_id is None:
+        return None
+    if pipeline_id not in cache:
+        try:
+            cache[pipeline_id] = client.list_pipeline_jobs(
+                project, pipeline_id, include_retried=True
+            )
+        except GitLabError as exc:
+            stderr.write(f"note: could not read retry history ({exc}); flaky detection skipped.\n")
+            cache[pipeline_id] = []
+    attempts = sorted(
+        (other for other in cache[pipeline_id] if other.get("name") == job.get("name")),
+        key=lambda other: other.get("id") or 0,
+    )
+    if not attempts:
+        return None
+    return RetryHistory(statuses=tuple(str(other.get("status") or "") for other in attempts))
+
+
 # ---------------------------------------------------------------------------
 # Commands
 # ---------------------------------------------------------------------------
@@ -420,6 +453,7 @@ def cmd_diagnose(args: argparse.Namespace, stdout: IO[str], stderr: IO[str], std
             jobs = jobs[:MAX_JOBS_DEFAULT]
 
     reports: list[Report] = []
+    pipelines: dict[int, list[dict[str, Any]]] = {}
     for job in jobs:
         job_ref = client.job_ref(job, target.project)
         raw = client.get_trace(target.project, int(job["id"]))
@@ -429,7 +463,13 @@ def cmd_diagnose(args: argparse.Namespace, stdout: IO[str], stderr: IO[str], std
             max_lines=args.max_evidence_lines,
             tail_lines=args.tail_lines,
         )
-        report = Report(job=job_ref, distilled=distilled, hits=match_rules(distilled))
+        pipeline_id = job_ref.pipeline_id or (None if target.is_job else target.id)
+        report = Report(
+            job=job_ref,
+            distilled=distilled,
+            hits=match_rules(distilled),
+            retry=_retry_history(client, target.project, pipeline_id, job, pipelines, stderr),
+        )
         ci_config = (
             client.get_ci_config(target.project, job_ref.ref or "HEAD")
             if args.with_ci_config

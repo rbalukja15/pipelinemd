@@ -35,6 +35,62 @@ class Confidence(StrEnum):
     LOW = "low"
 
 
+class FailureClass(StrEnum):
+    """The v1 taxonomy from #17: the failure modes pipelinemd v1 claims to handle.
+
+    Deliberately coarser than :class:`Category`. A category says what kind of
+    signature matched; a failure class says which supported failure mode that
+    puts the job in, and so what kind of fix to reach for. The two are kept
+    apart because they answer different questions - `dependency` and `lint`
+    are useful categories, but both land in the `test` class, since for v1
+    both mean "the project's own code failed, and the fix is a change to it".
+    """
+
+    #: The CI configuration itself: invalid YAML, or a job script that asks
+    #: for something the job does not have.
+    YAML = "yaml"
+    #: A credential or variable the job needs is missing, wrong, or scoped away.
+    CI_VARS = "ci_vars"
+    #: Acquiring or running the job's container image.
+    IMAGE_PULL = "image_pull"
+    #: Moving cache or artifacts between jobs.
+    CACHE_ARTIFACT = "cache_artifact"
+    #: The project's own code or manifests: tests, lint, type checks,
+    #: compilation, dependency resolution. Surfaced, not diagnosed.
+    TEST = "test"
+    #: The runner or its execution environment: resources and lifecycle.
+    RUNNER = "runner"
+    #: Transient: the same job would most likely pass unchanged on retry.
+    FLAKY = "flaky"
+    #: Outside the v1 taxonomy, or nothing recognisable fired. Always carries
+    #: low confidence, because v1 makes no claim about it.
+    UNCLASSIFIED = "unclassified"
+
+
+class FixType(StrEnum):
+    """Where the fix lives. The vocabulary is from #15.
+
+    `yaml_patch` is the one that matters most: it is what #24's MR generator
+    acts on, so it is the only value that can lead to an automated write.
+    """
+
+    YAML_PATCH = "yaml_patch"
+    CODE_PATCH = "code_patch"
+    INFRA = "infra"
+    FLAKY_RETRY = "flaky_retry"
+
+
+class RetryVerdict(StrEnum):
+    """What a job's other attempts in the same pipeline say about it."""
+
+    #: Another attempt of the same job, on the same commit, succeeded.
+    PASSED_ON_ANOTHER_ATTEMPT = "passed_on_another_attempt"
+    #: At least two attempts, and every one of them failed.
+    FAILED_EVERY_ATTEMPT = "failed_every_attempt"
+    #: One attempt, or none that finished either way. No signal.
+    INCONCLUSIVE = "inconclusive"
+
+
 # ---------------------------------------------------------------------------
 # Trace / distillation
 # ---------------------------------------------------------------------------
@@ -229,6 +285,9 @@ class Diagnosis:
     root_cause: str
     confidence: Confidence
     category: Category
+    #: The model's reading of the v1 class. Recorded and shown, but it never
+    #: decides the report's classification - see taxonomy.classify.
+    failure_class: FailureClass = FailureClass.UNCLASSIFIED
     fixes: tuple[Fix, ...] = ()
     citations: tuple[Citation, ...] = ()
     #: Line numbers the model cited that do not exist in the evidence. Kept
@@ -277,6 +336,52 @@ class JobRef:
         return " ".join(parts)
 
 
+@dataclass(frozen=True, slots=True)
+class RetryHistory:
+    """Every attempt of one job within its pipeline, oldest first.
+
+    All attempts in one pipeline ran against the same commit, so a different
+    outcome between them is about as direct as evidence of flakiness gets -
+    and it comes from GitLab's own records, not from reading the log.
+    """
+
+    statuses: tuple[str, ...]
+
+    @property
+    def attempts(self) -> int:
+        return len(self.statuses)
+
+    @property
+    def verdict(self) -> RetryVerdict:
+        # Only finished attempts count. A canceled or still-running attempt says
+        # nothing about whether the job can pass.
+        finished = [status for status in self.statuses if status in ("success", "failed")]
+        if len(self.statuses) < 2 or not finished:
+            return RetryVerdict.INCONCLUSIVE
+        if "success" in finished:
+            return RetryVerdict.PASSED_ON_ANOTHER_ATTEMPT
+        if len(finished) >= 2:
+            return RetryVerdict.FAILED_EVERY_ATTEMPT
+        return RetryVerdict.INCONCLUSIVE
+
+
+@dataclass(frozen=True, slots=True)
+class Classification:
+    """Which v1 class a failure falls in, what kind of fix it wants, and why."""
+
+    failure_class: FailureClass
+    #: None for unclassified: v1 makes no suggestion about what it cannot place.
+    fix_type: FixType | None
+    confidence: Confidence
+    #: Why this class, in a sentence a reader can check against the report.
+    basis: str
+    #: The rule the class came from, when one did.
+    rule_id: str | None = None
+    retry: RetryHistory | None = None
+    #: Which signal decided it: "rules", "retry-history", or "none".
+    source: str = "rules"
+
+
 @dataclass(slots=True)
 class Report:
     """Everything pipelinemd knows about one failed job."""
@@ -285,6 +390,8 @@ class Report:
     distilled: DistilledLog
     hits: list[RuleHit] = field(default_factory=list)
     diagnosis: Diagnosis | None = None
+    #: Other attempts of this job in the same pipeline, when they were fetched.
+    retry: RetryHistory | None = None
 
     @property
     def top_hit(self) -> RuleHit | None:

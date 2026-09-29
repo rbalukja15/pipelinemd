@@ -9,6 +9,7 @@ part rules cannot do: deciding which signal is the cause and which is fallout.
 from __future__ import annotations
 
 from ..models import Category, Confidence, DistilledLog, JobRef, RuleHit
+from ..taxonomy import MODEL_CLASSES
 
 SYSTEM_PROMPT = """\
 You are a CI/CD failure analyst. You are given a distilled excerpt of a failed \
@@ -38,6 +39,14 @@ fragment, a shell command, a config change). Include one only when you can be \
 specific; otherwise leave it as an empty string.
 - If the excerpt genuinely does not explain the failure, say that plainly and \
 set confidence to "low". Do not invent a cause to fill the field.
+- Place the failure in `failure_class`: `yaml` (the CI configuration or the \
+job's own script), `ci_vars` (a credential or variable is missing or scoped \
+away), `image_pull` (getting or running the job's image), `cache_artifact`, \
+`test` (the project's own code or manifests - tests, lint, compilation, \
+dependencies), or `runner` (the runner's resources or lifecycle). Use \
+`unclassified` when none of these fits; do not stretch one to cover it. \
+Whether a failure is flaky is decided from retry history, not from the log, \
+so it is not yours to answer.
 
 `«redacted»` marks a credential that pipelinemd masked before sending. Treat \
 it as an opaque placeholder; never ask for its value.
@@ -73,6 +82,14 @@ DIAGNOSIS_SCHEMA: dict[str, object] = {
             "type": "string",
             "enum": [category.value for category in Category],
         },
+        "failure_class": {
+            "type": "string",
+            "description": (
+                "The v1 failure class, or unclassified when none fits. Flaky is "
+                "not an option: it is decided from retry history."
+            ),
+            "enum": [failure_class.value for failure_class in MODEL_CLASSES],
+        },
         "fixes": {
             "type": "array",
             "description": "Ordered most-likely-to-work first. One to four entries.",
@@ -102,6 +119,7 @@ DIAGNOSIS_SCHEMA: dict[str, object] = {
         "root_cause",
         "confidence",
         "category",
+        "failure_class",
         "evidence_lines",
         "fixes",
     ],

@@ -5,9 +5,34 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from ..models import Report
+from ..models import Classification, Report
+from ..taxonomy import class_of, classify
 
+#: Bumped only for a change that breaks an existing reader. Adding a key is
+#: not one: `classification` and the per-hit `failure_class` arrived in #17
+#: without a bump, because a reader that ignores unknown keys is unaffected.
 SCHEMA_VERSION = 1
+
+
+def classification_to_dict(classification: Classification) -> dict[str, Any]:
+    retry = classification.retry
+    return {
+        "failure_class": classification.failure_class.value,
+        "fix_type": classification.fix_type.value if classification.fix_type else None,
+        "confidence": classification.confidence.value,
+        "basis": classification.basis,
+        "rule_id": classification.rule_id,
+        "source": classification.source,
+        "retry": (
+            {
+                "attempts": retry.attempts,
+                "statuses": list(retry.statuses),
+                "verdict": retry.verdict.value,
+            }
+            if retry is not None
+            else None
+        ),
+    }
 
 
 def report_to_dict(report: Report) -> dict[str, Any]:
@@ -81,6 +106,7 @@ def report_to_dict(report: Report) -> dict[str, Any]:
                 "id": hit.rule.id,
                 "title": hit.rule.title,
                 "category": hit.rule.category.value,
+                "failure_class": class_of(hit.rule).value,
                 "confidence": hit.rule.confidence.value,
                 "line_number": hit.line_number,
                 "line_text": hit.line_text,
@@ -92,6 +118,7 @@ def report_to_dict(report: Report) -> dict[str, Any]:
             }
             for hit in report.hits
         ],
+        "classification": classification_to_dict(classify(report)),
         "diagnosis": None,
     }
 
@@ -101,6 +128,7 @@ def report_to_dict(report: Report) -> dict[str, Any]:
             "root_cause": diagnosis.root_cause,
             "confidence": diagnosis.confidence.value,
             "category": diagnosis.category.value,
+            "failure_class": diagnosis.failure_class.value,
             "fixes": [
                 {"title": fix.title, "detail": fix.detail, "patch": fix.patch}
                 for fix in diagnosis.fixes

@@ -208,15 +208,31 @@ def test_diagnose_rejects_a_non_gitlab_url() -> None:
 class _FakeClient:
     """Stands in for GitLabClient without any network."""
 
-    def __init__(self, *args: Any, jobs: list[dict[str, Any]] | None = None, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        *args: Any,
+        jobs: list[dict[str, Any]] | None = None,
+        attempts: list[dict[str, Any]] | None = None,
+        **kwargs: Any,
+    ) -> None:
         self.jobs = (
             jobs
             if jobs is not None
             else [{"id": 1, "name": "build", "stage": "test", "status": "failed", "ref": "main"}]
         )
+        #: Every attempt in the pipeline, retries included. Defaults to the
+        #: jobs themselves - one attempt each, so no retry signal.
+        self.attempts = attempts if attempts is not None else self.jobs
+        self.pipeline_requests = 0
 
     def failed_jobs(self, project: str, pipeline_id: int) -> list[dict[str, Any]]:
         return self.jobs
+
+    def list_pipeline_jobs(
+        self, project: str, pipeline_id: int, *, include_retried: bool = False
+    ) -> list[dict[str, Any]]:
+        self.pipeline_requests += 1
+        return self.attempts
 
     def get_job(self, project: str, job_id: int) -> dict[str, Any]:
         return self.jobs[0]
@@ -230,7 +246,13 @@ class _FakeClient:
     def job_ref(self, job: dict[str, Any], project: str) -> Any:
         from pipelinemd.models import JobRef
 
-        return JobRef(name=job["name"], id=job["id"], stage=job.get("stage"), project=project)
+        return JobRef(
+            name=job["name"],
+            id=job["id"],
+            stage=job.get("stage"),
+            project=project,
+            pipeline_id=(job.get("pipeline") or {}).get("id"),
+        )
 
 
 def test_diagnose_a_job_url(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -286,6 +308,88 @@ def test_diagnose_all_jobs_emits_a_json_list(monkeypatch: pytest.MonkeyPatch) ->
     payload = json.loads(out)
     assert code == EXIT_OK
     assert isinstance(payload, list) and len(payload) == 2
+
+
+# -- retry history (#17) -----------------------------------------------------
+
+_FAILED = {"id": 1, "name": "build", "stage": "test", "status": "failed"}
+
+
+def _classification(out: str) -> dict[str, Any]:
+    return json.loads(out)["classification"]  # type: ignore[no-any-return]
+
+
+def test_a_job_that_passed_on_another_attempt_is_flaky(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The rules say npm.eresolve; GitLab's own record says a retry passed."""
+    attempts = [_FAILED, {"id": 2, "name": "build", "status": "success"}]
+    monkeypatch.setattr(
+        cli, "GitLabClient", lambda *a, **k: _FakeClient(jobs=[_FAILED], attempts=attempts)
+    )
+    code, out, _err = run(
+        "diagnose", "https://gitlab.com/acme/web/-/pipelines/7", "--no-llm", "--format", "json"
+    )
+    assert code == EXIT_OK
+    cls = _classification(out)
+    assert cls["failure_class"] == "flaky"
+    assert cls["source"] == "retry-history"
+    assert cls["rule_id"] == "npm.eresolve", "the rule is still reported"
+
+
+def test_a_job_url_reads_its_pipeline_from_the_job(monkeypatch: pytest.MonkeyPatch) -> None:
+    job = {**_FAILED, "pipeline": {"id": 7}}
+    attempts = [job, {"id": 2, "name": "build", "status": "success"}]
+    monkeypatch.setattr(
+        cli, "GitLabClient", lambda *a, **k: _FakeClient(jobs=[job], attempts=attempts)
+    )
+    code, out, _err = run(
+        "diagnose", "https://gitlab.com/acme/web/-/jobs/1", "--no-llm", "--format", "json"
+    )
+    assert code == EXIT_OK
+    assert _classification(out)["failure_class"] == "flaky"
+
+
+def test_other_jobs_retries_do_not_count(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Attempts are matched by job name; a different job passing says nothing."""
+    attempts = [_FAILED, {"id": 2, "name": "lint", "status": "success"}]
+    monkeypatch.setattr(
+        cli, "GitLabClient", lambda *a, **k: _FakeClient(jobs=[_FAILED], attempts=attempts)
+    )
+    _code, out, _err = run(
+        "diagnose", "https://gitlab.com/acme/web/-/pipelines/7", "--no-llm", "--format", "json"
+    )
+    cls = _classification(out)
+    assert cls["failure_class"] == "test"
+    assert cls["retry"]["attempts"] == 1
+
+
+def test_retry_history_is_fetched_once_per_pipeline(monkeypatch: pytest.MonkeyPatch) -> None:
+    jobs = [_FAILED, {"id": 3, "name": "test", "stage": "test", "status": "failed"}]
+    client = _FakeClient(jobs=jobs)
+    monkeypatch.setattr(cli, "GitLabClient", lambda *a, **k: client)
+    run("diagnose", "https://gitlab.com/acme/web/-/pipelines/7", "--all-jobs", "--no-llm")
+    assert client.pipeline_requests == 1
+
+
+def test_an_unreadable_retry_history_costs_only_the_flaky_signal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pipelinemd.errors import GitLabError
+
+    class _NoHistory(_FakeClient):
+        def list_pipeline_jobs(
+            self, project: str, pipeline_id: int, *, include_retried: bool = False
+        ) -> list[dict[str, Any]]:
+            raise GitLabError("403 Forbidden", status=403)
+
+    monkeypatch.setattr(cli, "GitLabClient", _NoHistory)
+    code, out, err = run(
+        "diagnose", "https://gitlab.com/acme/web/-/pipelines/7", "--no-llm", "--format", "json"
+    )
+    assert code == EXIT_OK, "the rules and the report do not depend on it"
+    assert "flaky detection skipped" in err
+    cls = _classification(out)
+    assert cls["failure_class"] == "test"
+    assert cls["retry"] is None
 
 
 def test_gitlab_errors_get_their_own_exit_code(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -17,19 +17,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .errors import PipelinemdError
+from .taxonomy import V1_CLASSES as _V1
 
 #: The v1 taxonomy from issue #17. A case outside these is a labelling error.
-V1_CLASSES: frozenset[str] = frozenset(
-    {
-        "yaml",
-        "ci_vars",
-        "image_pull",
-        "cache_artifact",
-        "test",
-        "runner",
-        "flaky",
-    }
-)
+#: Derived from the taxonomy rather than restated, so the corpus and the
+#: classifier cannot disagree about what the classes are.
+V1_CLASSES: frozenset[str] = frozenset(c.value for c in _V1)
 
 #: How a trace came to exist. The distinction is load-bearing: an accuracy
 #: figure computed only over authored traces measures the catalog against its
