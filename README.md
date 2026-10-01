@@ -15,6 +15,11 @@ pipelinemd does two things about that:
    strips the noise, scores every line for failure-likeness, and keeps only the
    regions that explain the outcome — then matches them against a catalog of
    **59 known CI failure signatures**, each with a real fix.
+   Every report is placed in one of seven **v1 failure classes** — `yaml`,
+   `ci_vars`, `image_pull`, `cache_artifact`, `test`, `runner`, `flaky` — with
+   the kind of fix it wants. Flaky comes from GitLab's retry history, not from
+   a guess: if another attempt of the same job passed on the same commit, it
+   says so.
 2. **An optional Claude diagnosis** reads only that distilled evidence and
    names the root cause, separating the actual fault from its fallout — and
    must cite the evidence lines it relied on. A diagnosis that cites nothing
@@ -29,6 +34,7 @@ $ pipelinemd diagnose https://gitlab.com/acme/web/-/jobs/98765
 pipelinemd  build (test) #98765
   acme/web · ref main · exit code 1 · 47s
   ERROR: Job failed: exit code 1
+  test → code_patch  ·  high  ·  from npm.lockfile-out-of-sync
 
 Diagnosis   high confidence · dependency
 
@@ -212,6 +218,11 @@ Rules live in `src/pipelinemd/rules/catalog.py`. A good one is narrow: anchor
 `patterns` to text the tool actually prints, write `explanation` as *why this
 happens*, and make each entry of `fixes` something someone can do. Add a
 fixture under `tests/fixtures/traces/` and assert the rule fires on it.
+
+Then give it a v1 class in `RULE_CLASS` in `src/pipelinemd/taxonomy.py` — the
+suite fails until you do. Choose from what the failure *is*, and only use
+`flaky` if it is transient whatever the environment; anything that is merely
+often transient is flaky only when retry history says so.
 
 ## License
 

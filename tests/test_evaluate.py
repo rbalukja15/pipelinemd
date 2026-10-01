@@ -124,6 +124,7 @@ def _mini(
     marker: str,
     pad: int = 0,
     case_id: str = "one",
+    failure_class: str = "test",
 ) -> Path:
     (tmp_path / "traces").mkdir()
     body = "".join(f"npm http fetch GET 200 registry/pkg-{i} 12ms\n" for i in range(pad))
@@ -137,7 +138,7 @@ def _mini(
         json.dumps(
             {
                 "id": case_id,
-                "failure_class": "test",
+                "failure_class": failure_class,
                 "expected_rule": expected_rule,
                 "exit_code": 1,
                 "evidence_marker": marker,
@@ -305,3 +306,68 @@ def test_misses_and_gaps_share_one_column_width(tmp_path: Path) -> None:
         if match and match.group(1) in listed:
             starts.add(2 + len(match.group(1)) + len(match.group(2)))
     assert len(starts) == 1, f"ragged id column: {sorted(starts)}"
+
+
+# -- class accuracy (#17) ---------------------------------------------------
+
+
+def test_a_case_in_the_right_class_scores_one(tmp_path: Path) -> None:
+    """npm.eresolve places this in `test`, and the case is labelled `test`."""
+    report = run_eval(_mini(tmp_path, expected_rule="npm.eresolve", marker="ERESOLVE"))
+    assert report.class_accuracy == 1.0
+    assert report.class_misses == ()
+
+
+def test_a_case_in_the_wrong_class_scores_zero_and_says_why(tmp_path: Path) -> None:
+    report = run_eval(
+        _mini(tmp_path, expected_rule="npm.eresolve", marker="ERESOLVE", failure_class="yaml")
+    )
+    assert report.class_accuracy == 0.0
+    (miss,) = report.class_misses
+    assert "npm.eresolve maps to test" in format_report(report)
+    assert miss.predicted_class.value == "test"
+
+
+def test_a_flaky_label_the_log_cannot_reach_is_explained_not_blamed(tmp_path: Path) -> None:
+    """The corpus has no retry history, so this miss is structural.
+
+    The reason must not claim the case *is* flaky - for some such cases retry
+    history would confirm the rule's class instead - only that the evidence
+    that could decide it is absent.
+    """
+    report = run_eval(
+        _mini(tmp_path, expected_rule="npm.eresolve", marker="ERESOLVE", failure_class="flaky")
+    )
+    text = format_report(report)
+    assert "npm.eresolve is not transient by nature" in text
+    assert "only retry history could make it flaky" in text
+
+
+def test_class_accuracy_counts_gaps_because_gaps_still_have_a_class(tmp_path: Path) -> None:
+    """Unlike rule@1: a gap has no expected rule, but it does have a class label."""
+    report = run_eval(_mini(tmp_path, expected_rule=None, marker="ERESOLVE"))
+    assert len(report.labelled) == 0
+    assert report.class_accuracy == 1.0, "npm.eresolve fired and places it in test"
+
+
+def test_the_real_corpus_class_misses_are_all_explained() -> None:
+    """Every miss carries a reason; an unexplained one would be a new kind of bug."""
+    text = format_report(REPORT)
+    for miss in REPORT.class_misses:
+        line = next(
+            row
+            for row in text.splitlines()
+            if row.strip().startswith(miss.case.id) and "labelled" in row
+        )
+        assert "(" in line and line.rstrip().endswith(")"), line
+
+
+def test_json_reports_class_accuracy_and_each_miss(tmp_path: Path) -> None:
+    payload = eval_report_to_dict(
+        run_eval(_mini(tmp_path, expected_rule="npm.eresolve", marker="E", failure_class="yaml"))
+    )
+    assert payload["overall"]["class_accuracy"] == 0.0  # type: ignore[index]
+    (miss,) = payload["class_misses"]  # type: ignore[misc]
+    assert miss["labelled"] == "yaml"
+    assert miss["predicted"] == "test"
+    assert miss["reason"] == "npm.eresolve maps to test"

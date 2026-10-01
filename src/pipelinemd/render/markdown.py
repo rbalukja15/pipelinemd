@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from ..models import Confidence, Report
+from ..taxonomy import classify, model_disagreement
 from .evidence import gap_before, select_display_lines
 
 _BADGE = {
@@ -37,13 +38,23 @@ def render_markdown(report: Report, *, rule_limit: int = 5, evidence_limit: int 
     if distilled.failure_reason:
         out += ["", f"> {distilled.failure_reason}"]
 
+    classification = classify(report)
+    fix_type = f" → `{classification.fix_type}`" if classification.fix_type else ""
+    out += [
+        "",
+        f"**class** `{classification.failure_class}`{fix_type} · "
+        f"{classification.confidence} · {classification.basis}",
+    ]
+
     if diagnosis := report.diagnosis:
         badge = _BADGE[diagnosis.confidence]
         out += [
             "",
             f"#### {badge} {diagnosis.summary}",
             "",
-            f"_{diagnosis.confidence.value} confidence · {diagnosis.category.value}_",
+            f"_{diagnosis.confidence.value} confidence · {diagnosis.category.value}"
+            + (f" · model reads it as {other}" if (other := model_disagreement(report)) else "")
+            + "_",
             "",
             diagnosis.root_cause,
         ]

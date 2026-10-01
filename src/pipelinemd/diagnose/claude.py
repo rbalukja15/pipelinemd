@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any
 
 from ..errors import DiagnosisError
 from ..models import Diagnosis, DistilledLog, Fix, JobRef, RuleHit
+from ..taxonomy import coerce_failure_class
 from .citations import coerce_line_numbers, resolve_citations
 from .prompt import (
     DIAGNOSIS_SCHEMA,
@@ -110,6 +111,7 @@ def _to_diagnosis(
         root_cause=str(payload.get("root_cause") or "").strip(),
         confidence=coerce_confidence(str(payload.get("confidence") or "low")),
         category=coerce_category(str(payload.get("category") or "script")),
+        failure_class=coerce_failure_class(payload.get("failure_class")),
         fixes=tuple(fixes),
         citations=citations,
         unresolved_citations=unresolved,

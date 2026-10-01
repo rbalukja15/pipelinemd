@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
+from dataclasses import replace
 
 import pytest
 
@@ -13,9 +14,11 @@ from pipelinemd.models import (
     Citation,
     Confidence,
     Diagnosis,
+    FailureClass,
     Fix,
     JobRef,
     Report,
+    RetryHistory,
 )
 from pipelinemd.render import (
     make_style,
@@ -321,3 +324,83 @@ def test_json_evidence_keeps_line_numbers(report: Report) -> None:
     numbers = [line["number"] for block in payload["evidence"] for line in block["lines"]]
     assert numbers == sorted(numbers)
     assert all(isinstance(number, int) for number in numbers)
+
+
+# -- classification (#17) ---------------------------------------------------
+
+
+def test_terminal_header_states_the_class_and_where_the_fix_lives(report: Report) -> None:
+    out = render_terminal(report, Style(enabled=False))
+    header = out.split("Evidence")[0]
+    assert "test → code_patch" in header
+    assert "from npm.eresolve" in header
+
+
+def test_terminal_says_when_the_model_reads_it_differently(report: Report) -> None:
+    """Shown, not applied: the model's class never overrides the rules."""
+    other = _with(report, replace(DIAGNOSIS, failure_class=FailureClass.CI_VARS))
+    out = render_terminal(other, Style(enabled=False))
+    assert "test → code_patch" in out, "the classification is still the rules'"
+    assert "model reads it as ci_vars" in out
+
+
+def test_terminal_is_quiet_when_the_model_agrees(report: Report) -> None:
+    agrees = _with(report, replace(DIAGNOSIS, failure_class=FailureClass.TEST))
+    assert "model reads it as" not in render_terminal(agrees, Style(enabled=False))
+
+
+def test_an_unrecognised_log_is_unclassified_with_no_fix_type() -> None:
+    bare = Report(job=JobRef(name="x"), distilled=distill("ERROR: Job failed: exit code 1\n"))
+    out = render_terminal(bare, Style(enabled=False))
+    assert "unclassified  ·  low  ·  no rule fired" in out
+    assert "→" not in out.split("\n")[2]
+
+
+def test_markdown_states_the_class(report: Report) -> None:
+    md = render_markdown(report)
+    assert "**class** `test` → `code_patch`" in md
+
+
+def test_json_carries_the_classification_and_each_hits_class(report: Report) -> None:
+    payload = json.loads(render_json(report))
+    assert payload["schema_version"] == 1, "additive: no reader breaks"
+    cls = payload["classification"]
+    assert cls["failure_class"] == "test"
+    assert cls["fix_type"] == "code_patch"
+    assert cls["source"] == "rules"
+    assert cls["retry"] is None
+    assert all("failure_class" in entry for entry in payload["rule_hits"])
+
+
+def test_json_carries_retry_history_when_it_was_fetched(report: Report) -> None:
+    flaky = Report(
+        job=report.job,
+        distilled=report.distilled,
+        hits=report.hits,
+        retry=RetryHistory(("failed", "success")),
+    )
+    cls = json.loads(render_json(flaky))["classification"]
+    assert cls["failure_class"] == "flaky"
+    assert cls["fix_type"] == "flaky_retry"
+    assert cls["retry"] == {
+        "attempts": 2,
+        "statuses": ["failed", "success"],
+        "verdict": "passed_on_another_attempt",
+    }
+
+
+def test_json_carries_the_models_class_on_the_diagnosis(report: Report) -> None:
+    payload = json.loads(render_json(_with(report, DIAGNOSIS)))
+    assert payload["diagnosis"]["failure_class"] == "unclassified"
+
+
+def test_a_model_that_declines_to_classify_is_not_a_disagreement(report: Report) -> None:
+    """`unclassified` from the model beside a confident rule is silence, not dissent."""
+    declined = _with(report, replace(DIAGNOSIS, failure_class=FailureClass.UNCLASSIFIED))
+    assert "model reads it as" not in render_terminal(declined, Style(enabled=False))
+    assert "model reads it as" not in render_markdown(declined)
+
+
+def test_markdown_shows_a_real_disagreement_too(report: Report) -> None:
+    other = _with(report, replace(DIAGNOSIS, failure_class=FailureClass.RUNNER))
+    assert "model reads it as runner" in render_markdown(other)

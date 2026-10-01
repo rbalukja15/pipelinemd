@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from ..models import Confidence, EvidenceLine, Report, RuleHit
+from ..models import Classification, Confidence, EvidenceLine, Report, RuleHit
+from ..taxonomy import classify, model_disagreement
 from .evidence import gap_before, select_display_lines
 from .style import Style
 
@@ -69,7 +70,22 @@ def _header(report: Report, style: Style) -> list[str]:
         lines.append(style.dim(f"  {job.url}"))
     if distilled.failure_reason:
         lines.append("  " + style.red(distilled.failure_reason))
+    lines.append(_class_line(classify(report), style))
     return lines
+
+
+def class_label(classification: Classification) -> str:
+    """`test -> code_patch`, or just `unclassified`: the class and where the fix lives."""
+    fix = f" → {classification.fix_type}" if classification.fix_type else ""
+    return f"{classification.failure_class}{fix}"
+
+
+def _class_line(classification: Classification, style: Style) -> str:
+    return (
+        "  "
+        + style.bold(class_label(classification))
+        + style.dim(f"  ·  {classification.confidence}  ·  {classification.basis}")
+    )
 
 
 def _diagnosis(report: Report, style: Style, width: int) -> list[str]:
@@ -80,7 +96,12 @@ def _diagnosis(report: Report, style: Style, width: int) -> list[str]:
     lines = [
         "",
         style.heading("Diagnosis")
-        + style.dim(f"   {diagnosis.confidence.value} confidence · {diagnosis.category.value}"),
+        + style.dim(f"   {diagnosis.confidence.value} confidence · {diagnosis.category.value}")
+        + (
+            style.dim(f" · model reads it as {other}")
+            if (other := model_disagreement(report))
+            else ""
+        ),
         "",
         "  " + colour(diagnosis.summary),  # type: ignore[operator]
     ]
