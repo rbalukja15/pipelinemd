@@ -235,11 +235,13 @@ travel, not a regression. See below.
 
 ## The class metric (#17)
 
-`class` arrived with the v1 taxonomy. Its first run is **49/60 — 81.7%**, and
+`class` arrived with the v1 taxonomy. Its first run was **49/60 — 81.7%**, and
 per the rule this document follows, **nothing was tuned to move it**: no label
-was changed and no mapping entry was adjusted after the number appeared. Every
-miss is explained below, and all four that are not coverage gaps are findings
-rather than fixes.
+was changed and no mapping entry was adjusted after the number appeared. It is
+now **51/62 — 82.3%**: the two cases added to pin the verdict ranking in #42
+both land in their labelled class, and nothing else moved. Every miss is
+explained below, and all four that are not coverage gaps are findings rather
+than fixes.
 
 ### How the class is decided
 
@@ -263,7 +265,8 @@ write has to come from a signal that gives the same answer twice.
 ask whether it was fitted to them. The arithmetic answers it. Three rules carry
 two different labels across corpus cases, so any static rule-to-class table
 must miss one case from each pair: **the best a table fitted to these labels
-could score is 50/60.** This one scores 49. The one case it gives up beyond
+could score is 52/62** (50/60 before #42's two cases). This one scores 51. The
+one case it gives up beyond
 that ceiling is `net.tls`, where it disagrees with the label on the facts —
 see below. Where a rule's meaning is unambiguous the table agrees with the
 labels; where it is not, it was chosen from the rule's meaning.
@@ -326,7 +329,7 @@ pipelinemd eval --corpus path/to/other      # score a different corpus
 `--min-rule-accuracy` would be a flag nobody runs, and everything above would
 be a report rather than a guard.
 
-Two thresholds, set in the [Makefile](../Makefile):
+Three thresholds, set in the [Makefile](../Makefile):
 
 **`MIN_RULE_ACCURACY = 0.92`.** Raised from 0.85 now that rule@1 is 55/55: 0.92
 is 51/55, so the build fails on the fifth regression. The headroom is still
@@ -342,6 +345,16 @@ merge on their own, and the per-case regression tests in
 traces will eventually push the rate under this floor; the right response is to
 lower it in a commit that says why, so the number moves in review rather than
 silently.
+
+**`MIN_CLASS_ACCURACY = 0.78`.** Class is 51/62 today; 0.78 is 49/62, so the
+build fails on the third regression. Of the four metrics this is the one with
+the sharpest downside: the class selects the fix type, `yaml_patch` is what
+#24's MR generator acts on, and a mapping change that quietly regresses
+classification would otherwise move a printed number and fail nothing. It
+arrived with the metric, after review pointed out that promoting `class` to a
+headline number without gating it repeated the gap-false-positive mistake from
+#41. As with the rule floor, lowering it in a commit that says why is the
+intended response to adding hard traces.
 
 **`MAX_GAP_FALSE_POSITIVES = 0`.** Known gaps are excluded from every rate, so
 a rule that starts firing on one moves *no number at all* — `--min-rule-accuracy`

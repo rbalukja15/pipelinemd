@@ -485,8 +485,11 @@ def test_eval_json_is_versioned_and_parses() -> None:
     assert payload["cases"] >= 60
 
 
-def _missing_corpus(tmp_path: Path) -> str:
+def _missing_corpus(tmp_path: Path, *, failure_class: str = "test") -> str:
     """One case whose expected rule never fires, so rule@1 is 0.0.
+
+    npm.eresolve fires and places it in `test`, so pass another `failure_class`
+    to make class accuracy 0.0 as well.
 
     The gate is tested against this rather than against the real corpus: a test
     that asserts `--min-rule-accuracy 1.0` fails is really asserting that the
@@ -505,7 +508,7 @@ def _missing_corpus(tmp_path: Path) -> str:
         json.dumps(
             {
                 "id": "one",
-                "failure_class": "test",
+                "failure_class": failure_class,
                 "expected_rule": "runner.no-space",
                 "exit_code": 1,
                 "evidence_marker": "ERESOLVE",
@@ -610,6 +613,57 @@ def test_a_bad_gate_is_rejected_before_anything_is_scored() -> None:
     code, out, _err = run("eval", "--min-rule-accuracy", "95")
     assert code == EXIT_USAGE
     assert out == "", "the report was written before the flag was validated"
+
+
+# -- the class gate (#43 review) ---------------------------------------------
+
+
+def test_eval_class_gate_fails_below_the_floor(tmp_path: Path) -> None:
+    """Class selects the fix type, and yaml_patch can become an automated MR.
+
+    A regression there has the sharpest downside of any metric, so it fails a
+    build rather than only moving a printed number.
+    """
+    corpus = _missing_corpus(tmp_path, failure_class="yaml")
+    code, _out, err = run("eval", "--corpus", corpus, "--min-class-accuracy", "0.5")
+    assert code == EXIT_BELOW_THRESHOLD
+    assert "class 0.0% is below the required 50.0%" in err
+
+
+def test_eval_class_gate_passes_when_the_class_is_right(tmp_path: Path) -> None:
+    """npm.eresolve places the case in `test`, and it is labelled `test`."""
+    corpus = _missing_corpus(tmp_path)
+    assert run("eval", "--corpus", corpus, "--min-class-accuracy", "1.0")[0] == EXIT_OK
+
+
+@pytest.mark.parametrize("rate", ["78", "-0.1", "1.01"])
+def test_a_class_floor_outside_zero_to_one_is_a_usage_error(rate: str) -> None:
+    code, out, err = run("eval", "--min-class-accuracy", rate)
+    assert code == EXIT_USAGE
+    assert "between 0 and 1" in err
+    assert out == "", "rejected before anything was scored"
+
+
+def test_every_breached_gate_is_reported_including_class(tmp_path: Path) -> None:
+    corpus = _missing_corpus(tmp_path, failure_class="yaml")
+    code, _out, err = run(
+        "eval", "--corpus", corpus, "--min-rule-accuracy", "0.5", "--min-class-accuracy", "0.5"
+    )
+    assert code == EXIT_BELOW_THRESHOLD
+    assert "rule@1" in err and "class" in err
+
+
+def test_eval_help_names_every_metric_it_reports() -> None:
+    import contextlib
+
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out), pytest.raises(SystemExit):
+        cli.build_parser().parse_args(["eval", "--help"])
+    text = " ".join(out.getvalue().split())
+    # The description, not the flag: --min-class-accuracy's own help also says
+    # "class accuracy", so checking for the bare words would pass regardless.
+    assert "reports rule@1, class accuracy, evidence hit rate" in text
+    assert "--min-class-accuracy" in text
 
 
 def test_eval_reports_a_missing_corpus_clearly(tmp_path: Path) -> None:

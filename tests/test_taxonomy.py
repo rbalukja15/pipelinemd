@@ -261,3 +261,29 @@ def test_categories_and_classes_are_different_questions() -> None:
     assert class_of(get_rule("npm.eresolve")) is FailureClass.TEST  # type: ignore[arg-type]
     assert get_rule("npm.eresolve").category is Category.DEPENDENCY  # type: ignore[union-attr]
     assert class_of(get_rule("lint.eslint")) is FailureClass.TEST  # type: ignore[arg-type]
+
+
+def test_a_top_rule_outside_v1_does_not_fall_through_to_the_next_hit() -> None:
+    """Deliberate, and asked about in review: see the classify_hits docstring.
+
+    The second hit here is the classic fallout - an artifact upload that found
+    nothing because the job had already failed. Falling through to it would put
+    the failure in the class of its own consequence.
+    """
+    result = classify_hits([hit("git.lfs-quota"), hit("ci.artifact-missing")])
+    assert result.failure_class is FailureClass.UNCLASSIFIED
+    assert result.rule_id == "git.lfs-quota"
+
+
+def test_the_corpus_loader_does_not_import_the_classifier() -> None:
+    """The corpus is data-layer; it validates labels against the enum in models.
+
+    Checked in a fresh interpreter, because by now this one has imported
+    everything.
+    """
+    import subprocess
+    import sys
+
+    probe = "import sys, pipelinemd.corpus; print('pipelinemd.taxonomy' in sys.modules)"
+    out = subprocess.run([sys.executable, "-c", probe], capture_output=True, text=True, check=True)
+    assert out.stdout.strip() == "False"

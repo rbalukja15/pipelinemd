@@ -16,6 +16,10 @@ write has to come from a signal that gives the same answer twice.
 
 from __future__ import annotations
 
+# Re-exported for callers that think of the v1 classes as part of the
+# taxonomy. It lives beside the enum in models, so the corpus loader can use it
+# without importing this module.
+from .models import V1_CLASSES as V1_CLASSES
 from .models import (
     Classification,
     Confidence,
@@ -26,11 +30,6 @@ from .models import (
     RetryVerdict,
     Rule,
     RuleHit,
-)
-
-#: The classes pipelinemd v1 claims to handle. `unclassified` is not one.
-V1_CLASSES: frozenset[FailureClass] = frozenset(
-    c for c in FailureClass if c is not FailureClass.UNCLASSIFIED
 )
 
 #: What the model may answer. Flaky is excluded on purpose: #17 asks for flaky
@@ -181,7 +180,17 @@ def classify_hits(
     hits: list[RuleHit] | tuple[RuleHit, ...],
     retry: RetryHistory | None = None,
 ) -> Classification:
-    """The deterministic classification: rules first, then retry history."""
+    """The deterministic classification: retry history first, then the top rule.
+
+    Only the top rule is consulted, deliberately. If it falls outside v1 the
+    failure is unclassified, even when a lower hit maps cleanly - the lower hit
+    is a weaker explanation the engine has already ranked below it, and often
+    the top hit's own fallout: an artifact upload that found nothing *because*
+    the build failed. Classifying by it would put the failure in the class of
+    its consequence. This holds for as long as a lower hit can be fallout,
+    which is the premise the engine's cleanup penalty is built on, so it is a
+    decision rather than a gap waiting to be filled.
+    """
     top = hits[0] if hits else None
     rule_id = top.rule.id if top else None
     verdict = retry.verdict if retry else RetryVerdict.INCONCLUSIVE

@@ -67,6 +67,14 @@ class FailureClass(StrEnum):
     UNCLASSIFIED = "unclassified"
 
 
+#: The classes pipelinemd v1 claims to handle. `unclassified` is not one.
+#: Defined here, beside the enum, so the corpus loader can validate labels
+#: without importing the classifier.
+V1_CLASSES: frozenset[FailureClass] = frozenset(
+    c for c in FailureClass if c is not FailureClass.UNCLASSIFIED
+)
+
+
 class FixType(StrEnum):
     """Where the fix lives. The vocabulary is from #15.
 

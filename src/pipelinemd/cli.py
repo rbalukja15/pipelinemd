@@ -187,7 +187,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="Score the deterministic pipeline against the labelled corpus.",
         description=(
             "Runs the distiller and rule engine over every labelled case and reports "
-            "rule@1, evidence hit rate and exit-code accuracy per failure class. "
+            "rule@1, class accuracy, evidence hit rate and exit-code accuracy per "
+            "failure class. "
             "Offline and deterministic: the LLM layer is not scored, so the same "
             "corpus always gives the same numbers."
         ),
@@ -204,6 +205,15 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         metavar="RATE",
         help="Exit non-zero if rule@1 falls below this (0-1); use as a regression gate.",
+    )
+    eval_parser.add_argument(
+        "--min-class-accuracy",
+        type=float,
+        metavar="RATE",
+        help=(
+            "Exit non-zero if class accuracy falls below this (0-1). The class selects "
+            "the fix type, and yaml_patch is what an automated MR acts on."
+        ),
     )
     eval_parser.add_argument(
         "--max-gap-false-positives",
@@ -537,6 +547,9 @@ def cmd_eval(args: argparse.Namespace, stdout: IO[str], stderr: IO[str], stdin: 
     floor = args.min_rule_accuracy
     if floor is not None and not 0.0 <= floor <= 1.0:
         raise UsageError(f"--min-rule-accuracy takes a rate between 0 and 1, not {floor:g}.")
+    class_floor = args.min_class_accuracy
+    if class_floor is not None and not 0.0 <= class_floor <= 1.0:
+        raise UsageError(f"--min-class-accuracy takes a rate between 0 and 1, not {class_floor:g}.")
     ceiling = args.max_gap_false_positives
     if ceiling is not None and ceiling < 0:
         raise UsageError(f"--max-gap-false-positives cannot be negative, got {ceiling}.")
@@ -554,6 +567,11 @@ def cmd_eval(args: argparse.Namespace, stdout: IO[str], stderr: IO[str], stdin: 
     failed = False
     if floor is not None and report.rule_accuracy < floor:
         stderr.write(f"rule@1 {report.rule_accuracy:.1%} is below the required {floor:.1%}.\n")
+        failed = True
+    if class_floor is not None and report.class_accuracy < class_floor:
+        stderr.write(
+            f"class {report.class_accuracy:.1%} is below the required {class_floor:.1%}.\n"
+        )
         failed = True
     false_positives = len(report.gap_false_positives)
     if ceiling is not None and false_positives > ceiling:

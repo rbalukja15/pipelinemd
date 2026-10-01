@@ -121,7 +121,10 @@ Two signals decide the class, and both are reproducible:
 
 - **The top rule's base class**, from one table in `taxonomy.py` covering all
   59 rules, so the decisions can be reviewed side by side. A test fails if a
-  rule is added without an entry.
+  rule is added without an entry. Only the *top* rule counts: if it falls
+  outside v1 the failure is unclassified, rather than falling through to a
+  lower hit — which the engine has already ranked as a weaker explanation, and
+  which is often the top hit's own fallout.
 - **Retry history.** Every attempt of a job in one pipeline ran against the
   same commit, so if another attempt passed, the job is flaky. That is
   GitLab's own record, fetched once per pipeline with `include_retried=true`,
