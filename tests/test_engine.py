@@ -9,6 +9,7 @@ import pytest
 
 from pipelinemd.distill import distill
 from pipelinemd.rules import get_rule, match_rules
+from pipelinemd.rules.engine import WRONG_MACHINE_WHEN_RESTATED
 
 # The whole point of the tool, expressed as a table.
 EXPECTED_TOP_RULE = {
@@ -109,9 +110,9 @@ def _job(*body: str, verdict: str = "ERROR: Job failed: exit code 1") -> str:
     return "\n".join(
         (
             "Running with gitlab-runner 16.11.0 (abc)",
-            'section_start:1700000020:step_script\x1b[0KExecuting "step_script" stage',
+            'section_start:1700000020:step_script\r\x1b[0KExecuting "step_script" stage',
             *body,
-            "section_end:1700000090:step_script\x1b[0K",
+            "section_end:1700000090:step_script\r\x1b[0K",
             verdict,
             "",
         )
@@ -183,7 +184,7 @@ def test_the_runners_verdict_outranks_what_it_quotes() -> None:
     """
     raw = (
         "Running with gitlab-runner 16.11.0 (abc)\n"
-        'section_start:1700000001:prepare_executor\x1b[0KPreparing the "docker" executor\n'
+        'section_start:1700000001:prepare_executor\r\x1b[0KPreparing the "docker" executor\n'
         "ERROR: Job failed (system failure): Cannot connect to the Docker daemon at "
         "unix:///var/run/docker.sock. Is the docker daemon running?\n"
         "ERROR: Job failed: exit code 1\n"
@@ -245,7 +246,7 @@ def test_a_genuine_aws_access_denial_still_fires() -> None:
 def _system_failure(reason: str) -> str:
     return (
         "Running with gitlab-runner 16.11.0 (abc)\n"
-        'section_start:1700000001:prepare_executor\x1b[0KPreparing the "docker" executor\n'
+        'section_start:1700000001:prepare_executor\r\x1b[0KPreparing the "docker" executor\n'
         f"ERROR: Job failed (system failure): {reason}\n"
         "ERROR: Job failed: exit code 1\n"
     )
@@ -308,3 +309,112 @@ def test_a_capitalised_timeout_is_still_a_timeout(line: str) -> None:
     ranked = [hit.rule.id for hit in match_rules(distill(_job(line)))]
     assert "net.connection-timeout" in ranked
     assert "net.connection-refused" not in ranked
+
+
+# ---------------------------------------------------------------------------
+# Second review of #42: category was the wrong proxy for "whose machine", and
+# the mechanism only engaged when the cause appeared on the verdict line alone.
+# Real runner output prints it several times first - a WARNING per pull
+# attempt, an `ERROR: Preparation failed:` per retry - so a rule's first match
+# was never the verdict, and the container won on recency.
+# ---------------------------------------------------------------------------
+
+_IMAGE = "registry.gitlab.com/acme/ci:1.2"
+_MANIFEST = (
+    f'failed to pull image "{_IMAGE}" with specified policies [always]: '
+    f"Error response from daemon: manifest for {_IMAGE} not found: manifest unknown"
+)
+_DAEMON = "Cannot connect to the Docker daemon at unix:///var/run/docker.sock."
+
+
+def _prepare_failure(error: str, *, warning: str | None = None, attempts: int = 3) -> str:
+    """What gitlab-runner prints when a job fails before any script runs."""
+    lines = [
+        "Running with gitlab-runner 15.11.0 (436955cb)",
+        'section_start:1700000001:prepare_executor\r\x1b[0KPreparing the "docker" executor',
+    ]
+    for _ in range(attempts):
+        lines.append(f" Using Docker executor with image {_IMAGE} ...")
+        if warning:
+            lines.append(f'WARNING: Failed to pull image with policy "always": {warning}')
+        lines += [f"ERROR: Preparation failed: {error}", "Will be retried in 3s ..."]
+    lines.append(f"ERROR: Job failed (system failure): {error}")
+    return "\n".join(lines) + "\n"
+
+
+def test_a_job_side_cause_restated_by_the_runner_is_the_answer() -> None:
+    """The tag in `image:` does not exist; fixing the tag is exactly right.
+
+    docker.manifest-unknown is `docker`, like docker.daemon-unreachable, so the
+    category-based rule demoted it. Its advice targets the right machine.
+    """
+    hits = match_rules(distill(_system_failure(_MANIFEST)))
+    assert hits[0].rule.id == "docker.manifest-unknown"
+    assert hits[1].rule.id == "runner.system-failure"
+    assert hits[0].score > hits[1].score
+
+
+def test_the_cause_wins_even_when_the_runner_printed_it_earlier_first() -> None:
+    """The shape real runners produce: warnings and retries, then the verdict.
+
+    The specific rule's first match is a WARNING line, long before the verdict,
+    so recency alone handed it to the container on the last line.
+    """
+    trace = _prepare_failure(_MANIFEST, warning="manifest unknown")
+    ranked = [hit.rule.id for hit in match_rules(distill(trace))]
+    assert ranked[0] == "docker.manifest-unknown"
+    assert ranked.index("runner.system-failure") < ranked.index("docker.pull-denied"), (
+        "pull-denied claims every prepare-time pull failure; it must not outrank the reason"
+    )
+
+
+def test_a_wrong_machine_cause_is_demoted_in_the_realistic_shape_too() -> None:
+    """With retries, the daemon rule used to lose only on recency - by luck."""
+    hits = match_rules(distill(_prepare_failure(_DAEMON)))
+    ranked = [hit.rule.id for hit in hits]
+    assert ranked[:2] == ["runner.system-failure", "docker.daemon-unreachable"]
+    container, daemon = hits[0].score, hits[1].score
+    assert container - daemon >= 20, "the margin must come from the rule, not from recency"
+
+
+def test_a_less_confident_cause_does_not_outrank_the_container() -> None:
+    """The bonus settles a tie between equally confident rules, and no more.
+
+    net.connection-timeout is MEDIUM and the container is HIGH, a 40-point gap
+    that a 10-point bonus does not close. Whether a restated MEDIUM cause
+    *should* outrank a HIGH container is open - no corpus case covers it - so
+    this pins today's behaviour rather than endorsing it.
+    """
+    ranked = [h.rule.id for h in match_rules(distill(_system_failure("dial tcp: i/o timeout")))]
+    assert ranked[:2] == ["runner.system-failure", "net.connection-timeout"]
+
+
+def test_a_rule_does_not_collect_a_restatement_it_disclaims() -> None:
+    """Exclusions apply on the verdict line, as everywhere else.
+
+    The refusal rule fired honestly on curl's earlier line. The verdict that
+    follows says "timed out", which that rule explicitly excludes - so it must
+    not be scored as the cause the runner restated. Without the check it ties
+    the timeout rule and wins on the id tie-break, naming a refusal on a line
+    that reports a timeout.
+    """
+    trace = _job(
+        "$ curl https://registry.example.com/v2/",
+        "curl: (7) Failed to connect to registry.example.com port 443: Connection refused",
+        verdict=(
+            "ERROR: Job failed (system failure): Failed to connect to "
+            "registry.example.com port 443: Connection timed out"
+        ),
+    )
+    hits = {hit.rule.id: hit.score for hit in match_rules(distill(trace))}
+    assert hits["net.connection-timeout"] > hits["net.connection-refused"]
+
+
+def test_the_wrong_machine_list_is_short_and_deliberate() -> None:
+    """Each entry needs a fix that is right in a job and wrong on the runner.
+
+    `services: [docker:dind]` is the one known so far. If this grows, the new
+    entry should be argued the same way, not inferred from its category.
+    """
+    assert {"docker.daemon-unreachable"} == WRONG_MACHINE_WHEN_RESTATED
+    assert all(get_rule(rule_id) is not None for rule_id in WRONG_MACHINE_WHEN_RESTATED)

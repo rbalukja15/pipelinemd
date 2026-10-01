@@ -46,7 +46,8 @@ class CorpusCase:
     id: str
     failure_class: str
     expected_rule: str | None
-    exit_code: int
+    #: None when no script ran, so the runner never reported one.
+    exit_code: int | None
     evidence_marker: str
     trace_path: Path
     provenance: str
@@ -164,19 +165,29 @@ def _expected_rule(record: dict[str, object], case_id: str) -> str | None:
     return expected
 
 
-def _exit_code(record: dict[str, object], case_id: str) -> int:
-    """Required, never defaulted.
+def _exit_code(record: dict[str, object], case_id: str) -> int | None:
+    """Required, never defaulted - but `null` is a legitimate answer.
 
     Defaulting to 0 in a corpus of *failed* jobs would turn an omitted label
     into a plausible-looking one, and the eval scores exit-code accuracy
     against it: the mistake would surface as a metric regression rather than
     as the labelling error it is.
+
+    An explicit `null` is different: it says no script ran, so there is no exit
+    code to read. A job that fails while the runner is still preparing - an
+    image that will not pull, a daemon that is down - ends with the runner's
+    verdict, not an exit status, and labelling it with one would be inventing
+    a line the runner never prints.
     """
     if "exit_code" not in record:
-        raise PipelinemdError(f"{case_id}: exit_code is required; a failed job has one")
+        raise PipelinemdError(
+            f"{case_id}: exit_code is required; use null if no script ran, never omit it"
+        )
     value = record["exit_code"]
+    if value is None:
+        return None
     if isinstance(value, bool) or not isinstance(value, int):
-        raise PipelinemdError(f"{case_id}: exit_code must be an integer, got {value!r}")
+        raise PipelinemdError(f"{case_id}: exit_code must be an integer or null, got {value!r}")
     return value
 
 

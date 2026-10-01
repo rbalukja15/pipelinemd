@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 from functools import lru_cache
 
-from ..models import Category, Confidence, DistilledLog, Rule, RuleHit
+from ..models import Confidence, DistilledLog, Rule, RuleHit
 from .catalog import ALL_RULES
 
 _CONFIDENCE_WEIGHT = {
@@ -29,34 +29,39 @@ NAMED_CAUSE_BONUS = 10.0
 DEFAULT_MIN_SCORE = 1.0
 
 # The runner's own verdict on the job. What follows the prefix is the runner
-# quoting the thing that went wrong.
-#
-#   ERROR: Job failed (system failure): Cannot connect to the Docker daemon
-#   ^--- runner.system-failure           ^--- docker.daemon-unreachable
-#
-# Both are true, and the first is the answer - but *not* because it matched
-# first. It is the answer because the docker daemon in question is the
-# runner's, the job never started, and docker.daemon-unreachable's advice
-# ("add services: [docker:dind]") is about the job's CI config: the wrong
-# machine.
-#
-# Matching inside the quote is therefore only half the test. The other half is
-# whether the quoted rule's advice targets the machine a system failure
-# actually implicates, and the catalog already records that as a category:
+# restating the thing that went wrong:
 #
 #   ERROR: Job failed (system failure): no space left on device
-#   ^--- runner.system-failure           ^--- runner.no-space  (resources)
+#   ^--- runner.system-failure           ^--- runner.no-space
 #
-# Here the quoted rule wins. runner.system-failure is a container, and says so
-# in its own first fix - "read the line right before this one". runner.no-space
-# names the fault and hands over `df -h` and `docker system prune`, aimed
-# squarely at the runner host. Demoting it would be the same confident wrong
-# answer in the opposite direction.
+# runner.system-failure is a container, and its own first fix says so: "read the
+# line right before this one". A rule that names the restated cause is usually
+# the better answer, and it is scored as if it matched at the verdict, because
+# that is where the runner concluded it. Without that, the container wins on
+# recency alone: it always sits on the last line, while real runner output
+# prints the cause several times earlier - a WARNING per pull attempt, an
+# `ERROR: Preparation failed:` per retry - so the specific rule's *first* match
+# is never the verdict at all.
+#
+# The exception is a rule whose advice is about the job's own setup of
+# something the runner also provides. Restated in the runner's verdict, the
+# thing in question is the runner's, and that advice points at the wrong
+# machine:
+#
+#   ERROR: Job failed (system failure): Cannot connect to the Docker daemon
+#                                        ^--- "add services: [docker:dind]"
+#
+# That is a property of the rule, not of its category: docker.manifest-unknown
+# is also `docker`, and restated in the same verdict its advice - fix the tag in
+# `image:` - is exactly right. Nor of the section: both fail in
+# prepare_executor. So the exceptions are named, one by one.
 VERDICT_LINE = re.compile(r"^ERROR: Job failed")
 
-#: Rules whose advice already targets the runner's own environment. When a
-#: system failure quotes one of these, the quote is the better answer.
-RUNNER_SCOPED = frozenset({Category.RUNNER, Category.RESOURCES})
+#: Rules whose advice targets the job's setup of something the runner provides.
+#: Restated in the runner's verdict, they describe the runner's, so they are
+#: demoted rather than promoted. An addition needs the same argument: name the
+#: fix that is right in a job and wrong on the runner.
+WRONG_MACHINE_WHEN_RESTATED: frozenset[str] = frozenset({"docker.daemon-unreachable"})
 
 # gitlab-runner sections that only run *after* the script has already decided
 # the job's fate. A rule firing in one of these is describing fallout - the
@@ -97,31 +102,34 @@ def _first_match(
     return None
 
 
-def _earliest_offset(rule: Rule, text: str) -> int:
-    """Where in the line this rule first matches.
+def _offset_in(rule: Rule, text: str) -> int | None:
+    """Where in the line this rule first matches, or None if it does not.
 
     Every pattern is tried rather than stopping at the first hit, because a
     rule anchored at column 0 by one pattern is adjudicating even if another of
-    its patterns also matches deeper in the line. Only called for the handful
-    of verdict lines in a trace, so the scan stays off the hot path.
+    its patterns also matches deeper in the line. Exclusions apply, as they do
+    everywhere else a rule is matched.
     """
+    if any(_compile(p).search(text) for p in rule.excludes):
+        return None
     starts = [m.start() for m in (_compile(p).search(text) for p in rule.patterns) if m]
-    return min(starts, default=0)
+    return min(starts) if starts else None
 
 
-def _verdict_adjustment(rule: Rule, text: str) -> float:
-    """How matching inside the runner's own verdict changes a rule's score.
+def _restated_at(rule: Rule, verdicts: list[tuple[int, str]]) -> int | None:
+    """The latest runner verdict that restates this rule's cause, if any.
 
-    Matching inside the quote rather than at the start of it is only half the
-    test; which way it cuts depends on whose machine the rule's advice targets.
-    A runner-scoped rule has *named* the fault the verdict only gestured at, so
-    it beats the container outright rather than tying with it. Anything else is
-    describing the quote, and is demoted - never suppressed, because it is
-    still the useful detail. See the comment on VERDICT_LINE.
+    "Restates" means the rule matches *inside* the verdict, after the prefix. A
+    rule matching at column 0 is the verdict itself - the container - and is
+    not restating anything. Verdict lines are a handful per trace, so this
+    stays off the hot path.
     """
-    if VERDICT_LINE.match(text) is None or _earliest_offset(rule, text) == 0:
-        return 0.0
-    return NAMED_CAUSE_BONUS if rule.category in RUNNER_SCOPED else -QUOTED_VERDICT_PENALTY
+    restating = [
+        number
+        for number, text in verdicts
+        if (offset := _offset_in(rule, text)) is not None and offset > 0
+    ]
+    return max(restating) if restating else None
 
 
 def _requires_satisfied(rule: Rule, corpus: str) -> bool:
@@ -152,6 +160,7 @@ def match_rules(
     evidence_corpus = "\n".join(text for _, text in evidence_lines)
     full_corpus = distilled.clean_text()
     total_lines = max(1, distilled.stats.clean_lines)
+    verdicts = [(number, text) for number, text in all_lines if VERDICT_LINE.match(text)]
 
     hits: list[RuleHit] = []
     for rule in rules:
@@ -172,10 +181,18 @@ def match_rules(
             score += EVIDENCE_BONUS
         if rule.exit_codes and distilled.exit_code in rule.exit_codes:
             score += EXIT_CODE_BONUS
-        score += RECENCY_BONUS * (number / total_lines)
+        # Where the runner restates this rule's cause in its verdict, score it
+        # there - see the comment on VERDICT_LINE.
+        position = number
+        if (restated := _restated_at(rule, verdicts)) is not None:
+            position = max(number, restated)
+            if rule.id in WRONG_MACHINE_WHEN_RESTATED:
+                score -= QUOTED_VERDICT_PENALTY
+            else:
+                score += NAMED_CAUSE_BONUS
+        score += RECENCY_BONUS * (position / total_lines)
         if section_of.get(number) in CLEANUP_SECTIONS:
             score -= CLEANUP_PENALTY
-        score += _verdict_adjustment(rule, text)
 
         if score < min_score:
             continue

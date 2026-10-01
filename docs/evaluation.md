@@ -24,19 +24,19 @@ how the failure was written, so it really can drop the line that matters.
 ## Results
 
 ```
-pipelinemd eval — 60 cases (60 authored)
+pipelinemd eval — 62 cases (62 authored)
 
 class            cases   rule@1  evidence  exit code
 ---------------- ----- -------- --------- ----------
 cache_artifact       8      7/7       8/8        8/8
 ci_vars              8      8/8       8/8        8/8
 flaky                9      8/8       9/9        9/9
-image_pull           9      9/9       9/9        9/9
-runner               9      9/9       9/9        9/9
+image_pull          10    10/10     10/10      10/10
+runner              10    10/10     10/10      10/10
 test                 9      6/6       9/9        9/9
 yaml                 8      6/6       8/8        8/8
 ---------------- ----- -------- --------- ----------
-overall             60    53/53     60/60      60/60
+overall             62    55/55     62/62      62/62
 
 rule@1 100.0%  ·  evidence 100.0%  ·  exit code 100.0%
 
@@ -66,6 +66,7 @@ what says it worked:
 | First run (#22) | 47/53 — 88.7% |
 | Three findings fixed, no labels touched | 51/53 — 96.2% |
 | Fourth finding, which needed a label correction | 53/53 — 100.0% |
+| Two cases added on review, to pin the verdict ranking | 55/55 — 100.0% |
 
 Each fix is a regression test in `tests/test_engine.py` that fails against the
 previous catalog.
@@ -132,13 +133,58 @@ ERROR: Job failed (system failure): no space left on device
 `docker system prune`) is aimed squarely at the runner host — the right machine
 — while `runner.system-failure`'s own first fix reads *"read the line right
 before this one"*. Demoting it would have been the same confident wrong answer
-in reverse. So the adjustment is signed: a `runner`- or `resources`-scoped rule
-quoted in a verdict gains 10 points and beats the container outright, rather
-than tying with it and winning on an alphabetical tie-break.
+in reverse. So the adjustment became signed, scoped by category: `runner` and
+`resources` rules gained 10, everything else lost 25.
+
+**A second review found category was the wrong proxy too**, and following it
+up showed something bigger. `docker.manifest-unknown` is `docker`, like the
+daemon rule, but restated in the same verdict its advice — fix the tag in
+`image:` — is exactly right, and the category rule demoted it. And on the
+trace shape real runners actually produce, the mechanism never engaged at all:
+
+```
+WARNING: Failed to pull image with policy "always": … manifest unknown
+ERROR: Preparation failed: failed to pull image … manifest unknown
+Will be retried in 3s ...
+   … twice more …
+ERROR: Job failed (system failure): failed to pull image … manifest unknown
+```
+
+The specific rule's *first* match is the `WARNING`, long before the verdict,
+so no adjustment applied, and the container — always on the last line — won
+on recency alone. It got the daemon case right the same way: by luck, with a
+12-point margin.
+
+Now a rule whose cause the runner restates in any verdict is scored *at* that
+verdict, and which way it moves is decided per rule: promoted, unless it is
+named in `WRONG_MACHINE_WHEN_RESTATED` — today only `docker.daemon-unreachable`,
+whose `services: [docker:dind]` advice is right in a job and wrong on the
+runner. Section was considered as the discriminator and rejected: both docker
+cases fail in `prepare_executor`.
+
+Two corpus cases now pin it, in the shape real runners print — retries, a
+system-failure verdict, and **no exit code**, since no script ran:
+
+| case | expects | before | after |
+| --- | --- | --- | --- |
+| `imagepull-prepare-tag-missing` | `docker.manifest-unknown` | rank 3 | rank 1 |
+| `runner-docker-daemon-down` | `runner.system-failure` | rank 1, by recency | rank 1, by 25 points |
+
+The second passes on both engines, so on its own it pins the outcome, not the
+mechanism; the unit tests in `tests/test_engine.py` pin the margin. Making
+room for them meant letting `exit_code` be an explicit `null` — the existing
+system-failure cases end in an `ERROR: Job failed: exit code 1` that a real
+runner does not print after a prepare failure, because the loader had nowhere
+else to put a job with no exit code.
 
 Either way the loser is demoted, not suppressed — it stays at rank 2, because
 it is the useful detail. The same message inside the job's own script is
 untouched and still ranks first.
+
+**Recorded, not fixed:** `docker.pull-denied` matches
+`ERROR: Preparation failed: failed to pull image` whatever the reason, so it
+fires on a missing tag too. It now ranks third there rather than first, but it
+is over-broad in the same way `docker.push-denied` is over-broad on pulls.
 
 ### Fixed: a cache credential that read as the job's AWS credential
 
@@ -205,8 +251,8 @@ be a report rather than a guard.
 
 Two thresholds, set in the [Makefile](../Makefile):
 
-**`MIN_RULE_ACCURACY = 0.92`.** Raised from 0.85 now that rule@1 is 53/53: 0.92
-is 49/53, so the build fails on the fifth regression. The headroom is still
+**`MIN_RULE_ACCURACY = 0.92`.** Raised from 0.85 now that rule@1 is 55/55: 0.92
+is 51/55, so the build fails on the fifth regression. The headroom is still
 deliberate, for the same reason as before — the corpus is meant to grow with
 `observed` traces, which will be harder than the authored ones, and a gate that
 goes red the moment someone commits a real failing log discourages the

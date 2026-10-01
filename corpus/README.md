@@ -1,6 +1,6 @@
 # Failure corpus
 
-60 labelled GitLab job traces, one file each, with a label record per trace in
+62 labelled GitLab job traces, one file each, with a label record per trace in
 [`corpus.jsonl`](corpus.jsonl). The tests use it to catch regressions; `make
 eval` uses it to put a number on accuracy.
 
@@ -55,7 +55,7 @@ separately and the number starts to mean what it says.
 | `id` | Unique, kebab-case, matches the trace filename. |
 | `failure_class` | One of the v1 taxonomy classes from #17: `yaml`, `ci_vars`, `image_pull`, `cache_artifact`, `test`, `runner`, `flaky`. |
 | `expected_rule` | The catalog rule that should rank first — or `null`, and only `null`, where no rule covers this failure yet. |
-| `exit_code` | What the runner reported. An integer, required: it is scored, so it is never defaulted. |
+| `exit_code` | What the runner reported. Required, never defaulted, because it is scored: an integer, or `null` when no script ran — a job that fails while the runner prepares ends with the runner's verdict, not an exit status. Leaving the field out is still an error. |
 | `evidence_marker` | Text a human would point at to explain the failure. Distillation must keep it; the eval measures how often it does. |
 | `trace` | Path relative to this directory, and inside it. |
 | `provenance` | `authored` or `observed`. See above. |
