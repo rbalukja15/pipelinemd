@@ -220,3 +220,19 @@ def test_every_loader_rejection_is_a_pipelinemd_error(tmp_path: Path) -> None:
     ):
         with pytest.raises(PipelinemdError):
             load_corpus(write_corpus(tmp_path, broken))
+
+
+def test_an_explicit_null_exit_code_means_no_script_ran(tmp_path: Path) -> None:
+    """A job that fails while the runner prepares never reports an exit code.
+
+    Labelling it with one would mean inventing a line the runner never prints -
+    which is how the older system-failure cases came to end in an
+    `ERROR: Job failed: exit code 1` that no real runner writes there.
+    """
+    (case,) = load_corpus(write_corpus(tmp_path, record(exit_code=None)))
+    assert case.exit_code is None
+
+
+def test_null_is_not_the_same_as_leaving_it_out(tmp_path: Path) -> None:
+    with pytest.raises(PipelinemdError, match="use null if no script ran, never omit it"):
+        load_corpus(write_corpus(tmp_path, record(exit_code=...)))

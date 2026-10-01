@@ -24,7 +24,7 @@ local file ─┘                                                     │       
 | `distill/redact.py` | Mask credential shapes. Line-count preserving. |
 | `distill/trace.py` | Sections, timestamps, metadata, per-line attribution. |
 | `distill/extract.py` | Score lines, grow windows, spend the budget, collapse repeats. |
-| `rules/catalog.py` | 58 failure signatures with fixes. Data, not code. |
+| `rules/catalog.py` | 59 failure signatures with fixes. Data, not code. |
 | `rules/engine.py` | Apply the catalog, rank the hits. |
 | `diagnose/prompt.py` | Build the request. Owns the JSON schema. |
 | `diagnose/citations.py` | Resolve the line numbers a diagnosis cited back to real evidence lines. |
@@ -64,7 +64,8 @@ bottom repeats it.
 ## Cause versus fallout
 
 The hardest part of reading a CI log is that a single fault produces many
-error-shaped lines. Three mechanisms address it:
+error-shaped lines — and that some of them describe the runner rather than the
+job. Four mechanisms address it:
 
 - **Dampeners.** `0 failed, 512 passed` uses failure vocabulary to report
   success. Five dampener patterns subtract from such lines so they do not
@@ -74,6 +75,35 @@ error-shaped lines. Three mechanisms address it:
   happened *because* the job already failed, so it is scored down 45 points and
   cannot outrank a hit in `step_script`. Without this, "artifact upload found no
   matching files" outranks the npm error that caused it.
+- **The verdict.** `ERROR: Job failed (system failure): …` is the runner
+  concluding, then restating the cause. `runner.system-failure` matches the
+  conclusion and is a container — its own first fix reads "read the line right
+  before this one". A rule matching the restated cause is usually the better
+  answer, so it is **scored at the verdict line**, not at its own first match.
+  That matters because real runner output prints the cause several times first
+  — a `WARNING:` per pull attempt, an `ERROR: Preparation failed:` per retry —
+  and the container, always on the last line, otherwise wins on recency alone.
+
+  Whether a restated cause is promoted (+10) or demoted (−25) depends on whose
+  machine its advice targets, and that is decided **per rule**:
+
+  | verdict restates | rule | advice | outcome |
+  | --- | --- | --- | --- |
+  | `no space left on device` | `runner.no-space` | `df -h`, `docker system prune` — the runner host | promoted, outranks the container |
+  | `manifest unknown` | `docker.manifest-unknown` | fix the tag in `image:` — the job | promoted, outranks the container |
+  | `Cannot connect to the Docker daemon` | `docker.daemon-unreachable` | add `services: [docker:dind]` — a job's dind, but this daemon is the runner's | demoted to rank 2 |
+
+  Two proxies were tried and rejected. **Category** puts both docker rules in
+  `docker`, yet one's advice is right and the other's is the wrong machine.
+  **Section** puts both in `prepare_executor`. So the demoted rules are named
+  one by one in `WRONG_MACHINE_WHEN_RESTATED`, and each needs a fix that is
+  right in a job and wrong on the runner.
+
+  The bonus settles a contest between **equally confident** rules. A MEDIUM
+  rule restated inside the HIGH container — a connection timeout, say — still
+  ranks second. Whether it should is open; no corpus case covers it yet.
+  Demoted or not, the losing rule stays in the ranking: it is the useful
+  detail, just not the answer.
 - **The model.** Rules cannot tell which of two genuine errors is upstream of
   the other. That judgement is the one thing the LLM layer is asked for, and the
   prompt says so explicitly.

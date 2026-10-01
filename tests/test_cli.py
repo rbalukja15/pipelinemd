@@ -381,9 +381,46 @@ def test_eval_json_is_versioned_and_parses() -> None:
     assert payload["cases"] >= 60
 
 
-def test_eval_gate_fails_below_the_floor() -> None:
+def _missing_corpus(tmp_path: Path) -> str:
+    """One case whose expected rule never fires, so rule@1 is 0.0.
+
+    The gate is tested against this rather than against the real corpus: a test
+    that asserts `--min-rule-accuracy 1.0` fails is really asserting that the
+    catalog is imperfect, which stops being true the moment someone fixes the
+    last miss, and then the gate looks broken.
+    """
+    (tmp_path / "traces").mkdir()
+    (tmp_path / "traces" / "one.log").write_text(
+        "Running with gitlab-runner 16.11.0 (abc)\n"
+        "$ npm ci\n"
+        "npm ERR! code ERESOLVE\n"
+        "ERROR: Job failed: exit code 1\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "corpus.jsonl").write_text(
+        json.dumps(
+            {
+                "id": "one",
+                "failure_class": "test",
+                "expected_rule": "runner.no-space",
+                "exit_code": 1,
+                "evidence_marker": "ERESOLVE",
+                "trace": "traces/one.log",
+                "provenance": "observed",
+                "notes": "synthetic",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return str(tmp_path)
+
+
+def test_eval_gate_fails_below_the_floor(tmp_path: Path) -> None:
     """--min-rule-accuracy is what turns the report into a CI guard."""
-    code, _out, err = run("eval", "--min-rule-accuracy", "1.0")
+    code, _out, err = run(
+        "eval", "--corpus", _missing_corpus(tmp_path), "--min-rule-accuracy", "0.5"
+    )
     assert code == EXIT_BELOW_THRESHOLD
     assert "below the required" in err
 
