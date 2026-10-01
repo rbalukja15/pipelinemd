@@ -1,0 +1,21 @@
+[0KRunning with gitlab-runner 15.11.0 (436955cb)[0;m
+[0;m  on green-2.shared.runners-manager xS6Vzpvo, system ID: s_4d1e[0;m
+section_start:1700000000:resolve_secrets[collapsed=true][0K[36;1mResolving secrets[0;m
+section_end:1700000001:resolve_secrets[0K
+section_start:1700000001:prepare_executor[collapsed=true][0K[36;1mPreparing the "docker" executor[0;m
+[0;m Using Docker executor with image registry.gitlab.com/acme/ci-base:2.4.1 ...[0;m
+[0;m Pulling docker image registry.gitlab.com/acme/ci-base:2.4.1 ...[0;m
+[0;33mWARNING: Failed to pull image with policy "always": Error response from daemon: manifest for registry.gitlab.com/acme/ci-base:2.4.1 not found: manifest unknown: manifest unknown (manager.go:237:0s)[0;m
+[31;1mERROR: Preparation failed: failed to pull image "registry.gitlab.com/acme/ci-base:2.4.1" with specified policies [always]: Error response from daemon: manifest for registry.gitlab.com/acme/ci-base:2.4.1 not found: manifest unknown: manifest unknown (manager.go:237:0s)[0;m
+[0;m Will be retried in 3s ...[0;m
+[0;m Using Docker executor with image registry.gitlab.com/acme/ci-base:2.4.1 ...[0;m
+[0;m Pulling docker image registry.gitlab.com/acme/ci-base:2.4.1 ...[0;m
+[0;33mWARNING: Failed to pull image with policy "always": Error response from daemon: manifest for registry.gitlab.com/acme/ci-base:2.4.1 not found: manifest unknown: manifest unknown (manager.go:237:0s)[0;m
+[31;1mERROR: Preparation failed: failed to pull image "registry.gitlab.com/acme/ci-base:2.4.1" with specified policies [always]: Error response from daemon: manifest for registry.gitlab.com/acme/ci-base:2.4.1 not found: manifest unknown: manifest unknown (manager.go:237:0s)[0;m
+[0;m Will be retried in 3s ...[0;m
+[0;m Using Docker executor with image registry.gitlab.com/acme/ci-base:2.4.1 ...[0;m
+[0;m Pulling docker image registry.gitlab.com/acme/ci-base:2.4.1 ...[0;m
+[0;33mWARNING: Failed to pull image with policy "always": Error response from daemon: manifest for registry.gitlab.com/acme/ci-base:2.4.1 not found: manifest unknown: manifest unknown (manager.go:237:0s)[0;m
+[31;1mERROR: Preparation failed: failed to pull image "registry.gitlab.com/acme/ci-base:2.4.1" with specified policies [always]: Error response from daemon: manifest for registry.gitlab.com/acme/ci-base:2.4.1 not found: manifest unknown: manifest unknown (manager.go:237:0s)[0;m
+section_end:1700000019:prepare_executor[0K
+[31;1mERROR: Job failed (system failure): failed to pull image "registry.gitlab.com/acme/ci-base:2.4.1" with specified policies [always]: Error response from daemon: manifest for registry.gitlab.com/acme/ci-base:2.4.1 not found: manifest unknown: manifest unknown (manager.go:237:0s)[0;m

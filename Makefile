@@ -8,7 +8,7 @@
 PYTHON ?= python3
 PYTEST_ARGS ?=
 
-# The regression floor for `make gate`. rule@1 is 53/53 today, so 0.92 is 49/53
+# The regression floor for `make gate`. rule@1 is 55/55 today, so 0.92 is 51/55
 # - the gate trips on the fifth regression. That headroom exists for one
 # reason: the corpus is meant to grow with observed traces, which will be
 # harder than the authored ones, and a gate that goes red the moment someone

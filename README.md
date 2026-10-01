@@ -100,7 +100,7 @@ pasting it anywhere.
 make eval
 ```
 
-Runs the distiller and rule engine over 60 labelled traces in [`corpus/`](corpus/README.md)
+Runs the distiller and rule engine over 62 labelled traces in [`corpus/`](corpus/README.md)
 and reports rule@1, evidence hit rate and exit-code accuracy per failure class.
 Offline and deterministic. Results and their caveats: [docs/evaluation.md](docs/evaluation.md).
 
