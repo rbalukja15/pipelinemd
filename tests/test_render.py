@@ -404,3 +404,103 @@ def test_a_model_that_declines_to_classify_is_not_a_disagreement(report: Report)
 def test_markdown_shows_a_real_disagreement_too(report: Report) -> None:
     other = _with(report, replace(DIAGNOSIS, failure_class=FailureClass.RUNNER))
     assert "model reads it as runner" in render_markdown(other)
+
+
+# -- confidence and cost (#18) ----------------------------------------------
+
+
+def test_terminal_shows_the_confidence_and_that_rules_cost_nothing(report: Report) -> None:
+    out = render_terminal(report, Style(enabled=False))
+    assert "  confidence high\n" in out
+    assert "cost $0 — rules only, no model call" in out
+
+
+def test_terminal_shows_the_estimated_cost_of_a_diagnosis(report: Report) -> None:
+    """1,200 in and 400 out on Opus 5: $0.006 + $0.010."""
+    out = render_terminal(_with(report, DIAGNOSIS), Style(enabled=False))
+    assert "est. cost $0.0160 · claude-opus-5 · 1,200 in / 400 out tokens" in out
+
+
+def test_terminal_sends_a_weak_analysis_to_review_and_says_why(report: Report) -> None:
+    out = render_terminal(_with(report, UNGROUNDED), Style(enabled=False), width=400)
+    line = next(line for line in out.splitlines() if "needs human review" in line)
+    assert "low confidence" in line
+    assert "the model rated its diagnosis low" in line
+    assert "L41203" in line
+
+
+def test_terminal_review_line_wraps_at_the_report_width(report: Report) -> None:
+    out = render_terminal(_with(report, UNGROUNDED), Style(enabled=False), width=60)
+    start = out.index("needs human review")
+    block = out[start : out.index("est. cost", start)]
+    assert all(len(line) <= 60 for line in block.splitlines())
+
+
+def test_markdown_shows_the_confidence_and_cost(report: Report) -> None:
+    out = render_markdown(_with(report, DIAGNOSIS))
+    assert "**confidence** high" in out
+    assert "<sub>est. cost $0.0160 · claude-opus-5 · 1,200 in / 400 out tokens</sub>" in out
+    assert "Needs human review" not in out
+
+
+def test_markdown_flags_review_where_a_reviewer_will_see_it(report: Report) -> None:
+    out = render_markdown(_with(report, UNGROUNDED))
+    assert "> ⚠️ **Needs human review** — low confidence:" in out
+    assert out.index("Needs human review") < out.index(UNGROUNDED.summary), "before the claim"
+
+
+def test_json_carries_the_assessment(report: Report) -> None:
+    payload = json.loads(render_json(_with(report, UNGROUNDED)))
+    assert payload["assessment"] == {
+        "confidence": "low",
+        "needs_review": True,
+        "review_below": "medium",
+        "reasons": [
+            "the model rated its diagnosis low",
+            "the diagnosis cited L41203, which is not in the evidence",
+        ],
+    }
+
+
+def test_json_carries_the_cost(report: Report) -> None:
+    payload = json.loads(render_json(_with(report, DIAGNOSIS)))
+    cost = payload["cost"]
+    assert cost["estimated_usd"] == pytest.approx(0.016)
+    assert cost["prices_as_of"]
+    assert cost["unpriced_models"] == []
+    assert cost["discarded_calls"] == 0
+    assert (cost["total_input_tokens"], cost["total_output_tokens"]) == (1200, 400)
+    assert cost["calls"] == [
+        {
+            "model": "claude-opus-5",
+            "input_tokens": 1200,
+            "output_tokens": 400,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "estimated_usd": pytest.approx(0.016),
+        }
+    ]
+
+
+def test_json_rules_only_cost_is_zero_not_null(report: Report) -> None:
+    """Null means "could not be priced"; a run that called no model cost nothing."""
+    cost = json.loads(render_json(report))["cost"]
+    assert cost["estimated_usd"] == 0.0
+    assert cost["calls"] == []
+
+
+def test_json_an_unpriced_model_is_null_not_a_guess(report: Report) -> None:
+    payload = json.loads(render_json(_with(report, replace(DIAGNOSIS, model="claude-opus-9"))))
+    assert payload["cost"]["estimated_usd"] is None
+    assert payload["cost"]["unpriced_models"] == ["claude-opus-9"]
+    assert payload["cost"]["calls"][0]["estimated_usd"] is None
+
+
+def test_json_diagnosis_usage_gains_the_cache_counts(report: Report) -> None:
+    usage = json.loads(render_json(_with(report, DIAGNOSIS)))["diagnosis"]["usage"]
+    assert usage == {
+        "input_tokens": 1200,
+        "output_tokens": 400,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+    }

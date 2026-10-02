@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from ..assessment import assess
+from ..cost import cost_of, describe_cost
 from ..models import Confidence, Report
 from ..taxonomy import classify, model_disagreement
 from .evidence import gap_before, select_display_lines
@@ -45,6 +47,13 @@ def render_markdown(report: Report, *, rule_limit: int = 5, evidence_limit: int 
         f"**class** `{classification.failure_class}`{fix_type} · "
         f"{classification.confidence} · {classification.basis}",
     ]
+    assessment = assess(report)
+    why = "; ".join(assessment.reasons)
+    if assessment.needs_review:
+        out += ["", f"> ⚠️ **Needs human review** — {assessment.confidence} confidence: {why}"]
+    else:
+        out += ["", f"**confidence** {assessment.confidence}" + (f" — {why}" if why else "")]
+    out += ["", f"<sub>{describe_cost(cost_of(report))}</sub>"]
 
     if diagnosis := report.diagnosis:
         badge = _BADGE[diagnosis.confidence]

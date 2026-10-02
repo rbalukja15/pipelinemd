@@ -12,6 +12,7 @@ seconds, and gives the same answer every time.
 | **class** | Did the classifier put the case in the v1 class the corpus labels? Scored over *every* case: a gap has no expected rule, but it does have a class. |
 | **evidence** | Did the line a human would point at survive distillation into the excerpt? |
 | **exit code** | Did the distiller read the runner's verdict correctly? |
+| **class by confidence** | At each confidence level a report can show, how often is the class right? Reported per level, not as one rate. |
 
 **The LLM diagnosis is deliberately not scored.** It needs an API key, costs
 money per run, and is not reproducible — folding it in would turn `make eval`
@@ -40,6 +41,11 @@ yaml                 8      6/6     6/8       8/8        8/8
 overall             62    55/55   51/62     62/62      62/62
 
 rule@1 100.0%  ·  class 82.3%  ·  evidence 100.0%  ·  exit code 100.0%
+
+Class accuracy by confidence
+  high       39/43   91%
+  medium       9/9  100%
+  low         3/10   30%  needs human review
 
 Known gaps — no rule covers these (7)
   yaml-yamllint-indentation       correctly silent
@@ -298,6 +304,40 @@ a stubbed GitLab, but the eval number says nothing about it. Adding
 it would mean inventing the history, and it would flip two misses in the same
 change that introduces the measurement. Both are reasons to wait for observed
 traces.
+
+## Confidence (#18)
+
+Every report shows a confidence, and at low it says **needs human review**.
+The table above is the evidence for that bar. It scores the confidence a
+reader is actually shown — each case is assessed as a report, rules only —
+and, per the rule this document follows, **nothing was re-rated after it
+appeared**.
+
+| level | class right | what is there |
+| --- | --- | --- |
+| high | 39/43 | The four misses are the four non-gap class misses above. Three are not the rule's doing: two need retry history, and one is the TLS label in question. The fourth is: `docker.push-denied` matching a pull, the catalog precision bug already recorded. |
+| medium | 9/9 | |
+| low | 3/10 | Seven are the coverage gaps: nothing fired, so the analysis is the tool saying it does not know — and every one is sent to review. The three right ones are `ci.cache-failed`, the only low-rated rule that ranks first anywhere in the corpus. |
+
+What it supports, and what it does not:
+
+- **The review bar is where the data puts it.** Low is the only level that is
+  wrong more often than right, and the only one the bar catches. A test holds
+  that premise — low below both other levels — so a corpus change that breaks
+  it fails loudly and the bar gets revisited rather than quietly kept.
+- **High is not above medium here.** 91% against 100% looks inverted, but nine
+  medium cases cannot separate the two, and every high miss is already a
+  recorded finding. It is the number to watch as observed traces arrive; if
+  high stays below medium, the catalog's ratings are wrong.
+- **It is not calibration in the probabilistic sense.** "High" does not mean
+  "right 91% of the time"; on authored traces it cannot. It means the level is
+  ordered the way it claims to be, which is the claim an ordinal makes.
+
+The model's half of the confidence — its own rating, citations that do not
+resolve, a class it reads differently — only exists with a diagnosis, so like
+the diagnosis it is not scored here. Unit tests cover each adjustment, and a
+property test checks every combination for the three promises: never above the
+rules or the model, reasons exactly when below high, review exactly at low.
 
 ## Reading the number honestly
 

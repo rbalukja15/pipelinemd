@@ -350,6 +350,9 @@ def _maybe_diagnose(
         )
     except DiagnosisError as exc:
         stderr.write(f"note: Claude diagnosis unavailable ({exc}). Rules were still applied.\n")
+        if exc.usage is not None:
+            # The model answered and the answer was refused: billed regardless.
+            return replace(report, discarded_calls=(*report.discarded_calls, exc.usage))
         return report
     return replace(report, diagnosis=diagnosis)
 

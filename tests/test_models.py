@@ -22,6 +22,7 @@ from pipelinemd.models import (
     RuleHit,
     Section,
     TraceLine,
+    Usage,
 )
 
 
@@ -188,6 +189,28 @@ def test_diagnosis_defaults() -> None:
     )
     assert diagnosis.fixes == ()
     assert (diagnosis.input_tokens, diagnosis.output_tokens) == (0, 0)
+    assert (diagnosis.cache_creation_input_tokens, diagnosis.cache_read_input_tokens) == (0, 0)
+
+
+def test_a_diagnosis_reports_the_usage_of_the_call_behind_it() -> None:
+    diagnosis = Diagnosis(
+        summary="s",
+        root_cause="r",
+        confidence=Confidence.LOW,
+        category=Category.SCRIPT,
+        model="claude-opus-5",
+        input_tokens=1,
+        output_tokens=2,
+        cache_creation_input_tokens=3,
+        cache_read_input_tokens=4,
+    )
+    assert diagnosis.usage == Usage(
+        model="claude-opus-5",
+        input_tokens=1,
+        output_tokens=2,
+        cache_creation_input_tokens=3,
+        cache_read_input_tokens=4,
+    )
 
 
 def test_fully_grounded_requires_citations_and_no_invented_ones() -> None:

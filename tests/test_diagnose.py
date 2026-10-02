@@ -87,6 +87,31 @@ def test_diagnose_returns_a_structured_result(distilled: Any) -> None:
     assert (result.input_tokens, result.output_tokens) == (1234, 567)
 
 
+def test_cache_token_counts_are_recorded_too(distilled: Any) -> None:
+    """Billed separately from `input_tokens`, so a cost that skipped them would be low."""
+
+    class _CachedUsage(_Usage):
+        cache_creation_input_tokens = 300
+        cache_read_input_tokens = 40
+
+    response = _Response([_Block("text", json.dumps(PAYLOAD))])
+    response.usage = _CachedUsage()
+    result = diagnose(JobRef(name="build"), distilled, [], client=_Client(response))
+    assert (result.cache_creation_input_tokens, result.cache_read_input_tokens) == (300, 40)
+
+
+def test_absent_cache_counts_read_as_zero(distilled: Any) -> None:
+    client = _Client(_Response([_Block("text", json.dumps(PAYLOAD))]))
+    result = diagnose(JobRef(name="build"), distilled, [], client=client)
+    assert (result.cache_creation_input_tokens, result.cache_read_input_tokens) == (0, 0)
+
+
+def test_the_requested_model_is_what_the_usage_is_priced_as(distilled: Any) -> None:
+    client = _Client(_Response([_Block("text", json.dumps(PAYLOAD))]))
+    result = diagnose(JobRef(name="build"), distilled, [], client=client, model="claude-sonnet-5")
+    assert result.usage.model == "claude-sonnet-5"
+
+
 def test_request_uses_the_documented_api_shape(distilled: Any) -> None:
     client = _Client(_Response([_Block("text", json.dumps(PAYLOAD))]))
     diagnose(JobRef(name="build"), distilled, [], client=client, model="claude-opus-5")
@@ -255,3 +280,36 @@ def test_a_class_the_model_may_not_give_reads_as_unclassified(
     result = diagnose(JobRef(name="build"), distilled, match_rules(distilled), client=client)
     assert result.failure_class is FailureClass.UNCLASSIFIED
     assert result.confidence is Confidence.HIGH, "the root-cause confidence is the model's own"
+
+
+# -- billed even when refused (#18) -----------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("response", "match"),
+    [
+        (_Response([_Block("text", "{}")], stop_reason="refusal"), "declined"),
+        (_Response([_Block("text", "I think the build broke.")]), "not JSON"),
+        (_Response([_Block("thinking")]), "no text block"),
+        (
+            _Response([_Block("text", json.dumps({**PAYLOAD, "evidence_lines": [41203]}))]),
+            "41203",
+        ),
+    ],
+    ids=["refusal", "not-json", "no-text", "ungrounded"],
+)
+def test_an_answer_turned_down_still_reports_what_it_cost(
+    distilled: Any, response: Any, match: str
+) -> None:
+    """The model answered, so the call was billed, whatever became of the answer."""
+    with pytest.raises(DiagnosisError, match=match) as caught:
+        diagnose(JobRef(name="build"), distilled, [], client=_Client(response))
+    assert caught.value.usage is not None
+    assert (caught.value.usage.input_tokens, caught.value.usage.output_tokens) == (1234, 567)
+
+
+def test_no_answer_means_no_usage(distilled: Any) -> None:
+    """A transport failure never reached the model, so there is nothing to bill."""
+    with pytest.raises(DiagnosisError) as caught:
+        diagnose(JobRef(name="b"), distilled, [], client=_Client(error=RuntimeError("reset")))
+    assert caught.value.usage is None

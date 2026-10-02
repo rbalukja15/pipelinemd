@@ -27,6 +27,8 @@ local file ─┘                                                     │       
 | `rules/catalog.py` | 59 failure signatures with fixes. Data, not code. |
 | `rules/engine.py` | Apply the catalog, rank the hits. |
 | `taxonomy.py` | Place a failure in the v1 taxonomy, and pick its fix type. The rule-to-class table lives here. |
+| `assessment.py` | How far to trust an analysis: one confidence from every signal behind it, and when to send it to human review. |
+| `cost.py` | List prices, and what an analysis's model calls cost. |
 | `diagnose/prompt.py` | Build the request. Owns the JSON schema. |
 | `diagnose/citations.py` | Resolve the line numbers a diagnosis cited back to real evidence lines. |
 | `diagnose/claude.py` | Make the call. Never fatal. |
@@ -187,9 +189,54 @@ This is why line numbers are preserved through every distillation stage. They
 are not a display convenience — they are the mechanism that makes a diagnosis
 checkable.
 
-Confidence is deliberately *not* adjusted when citations fail to resolve. That
-belongs with the calibration work in #18, and mixing it in here would hide a
-grounding failure behind a number.
+The diagnosis's own confidence is left as the model gave it when citations
+fail to resolve. The failure lowers the confidence of the *analysis* instead
+(below), alongside the warning rather than in place of it, so a grounding
+failure is never hidden behind a number.
+
+## Confidence and cost: what an analysis is worth, and what it cost
+
+Every report shows an analysis-level confidence and an estimated cost (#18).
+Both are derived from the report on demand, like the classification, so
+neither can go stale when the diagnosis arrives.
+
+**Confidence is never more than the weakest signal behind it.** It starts
+from the classification's — the top rule's, or retry history's — and when
+there is a diagnosis it is capped at the model's own rating. Two signs of
+trouble each cost a level: citations that do not resolve, and a model that
+places the failure in a different class from the rules. A model that declines
+to classify is not a sign of trouble, and neither is one that names a class
+where the rules named none — there it is contradicting nothing. With nothing
+classified the analysis is low: a diagnosis no rule corroborates is the
+model's word alone, and no fix type follows from it.
+
+At low the report says **needs human review**, with every reason the
+confidence fell, printed above the diagnosis so it is read first. The bar is
+`REVIEW_BELOW = medium`, chosen from the eval: low is the one level that is
+wrong more often than right (see [evaluation](evaluation.md#confidence-18)).
+JSON carries the level, the flag, the bar and the reasons, so a consumer that
+wants a stricter bar — #24 might open MRs only at high — applies its own.
+
+It stays an ordinal, like every confidence in this tool. A score of 0.83
+would claim a calibration nothing here has; the eval reports how often each
+level is right instead, which is a claim that can be checked.
+
+**Cost is estimated from what the API says it billed.** All four counts are
+captured — input, output, cache writes, cache reads — and priced at the list
+rates in `cost.py`, which records the date they were copied. Three rules keep
+the estimate honest:
+
+- **A refused answer still cost money.** A refusal, a reply that is not JSON,
+  or a diagnosis rejected for citing nothing real were all billed, so the error
+  carries the call's usage and the report counts it as a discarded call.
+- **No model call, no cost.** A rules-only analysis shows `$0` and says why.
+- **No price, no number.** A model missing from the table gets `unknown`, not
+  a neighbour's price, and one unpriced call makes the total unknown rather
+  than a partial sum that looks whole.
+
+What the estimate cannot see is anything a response does not report: Bedrock
+and Google Cloud pricing, US-only inference, negotiated rates. It is labelled
+an estimate everywhere it appears for that reason.
 
 ## Why the core has no dependencies
 

@@ -17,6 +17,11 @@ out of scope: it needs a key, costs money per run, and is not reproducible, so
 folding it in would turn `make eval` from a regression gate into a bill. What
 is measured here runs offline and gives the same answer every time.
 
+Alongside them, class accuracy per confidence level: the evidence that the
+confidence an analysis shows (#18) means something. A level is worth showing
+only if it is right more often than the level below it, and `low` - the level
+that sends an analysis to human review - should be the one that is wrong.
+
 The report separates authored cases from observed ones, because an accuracy
 figure computed over traces written by the same hand that wrote the rules is a
 regression signal rather than a measurement. Collapsing the two would quietly
@@ -29,9 +34,10 @@ from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
+from .assessment import REVIEW_BELOW, assess, rank
 from .corpus import CorpusCase, load_corpus
 from .distill import distill
-from .models import DistilledLog, FailureClass
+from .models import Confidence, DistilledLog, FailureClass, JobRef, Report
 from .rules import match_rules
 from .taxonomy import classify_hits
 
@@ -48,6 +54,8 @@ class CaseResult:
     reduction: float
     fired_rules: tuple[str, ...]
     predicted_class: FailureClass = FailureClass.UNCLASSIFIED
+    #: The confidence the analysis would show - rules only, as everywhere here.
+    confidence: Confidence = Confidence.LOW
 
     @property
     def rule_correct(self) -> bool:
@@ -80,6 +88,19 @@ class CaseResult:
 
 
 @dataclass(frozen=True, slots=True)
+class ConfidenceScore:
+    """How often the class was right among cases shown at one confidence level."""
+
+    confidence: Confidence
+    cases: int
+    classes: int
+
+    @property
+    def needs_review(self) -> bool:
+        return rank(self.confidence) < rank(REVIEW_BELOW)
+
+
+@dataclass(frozen=True, slots=True)
 class ClassScore:
     failure_class: str
     cases: int
@@ -104,6 +125,9 @@ def evaluate_case(case: CorpusCase) -> CaseResult:
     distilled: DistilledLog = distill(case.read())
     hits = match_rules(distilled)
     fired = tuple(hit.rule.id for hit in hits)
+    # Assessed as a report, so the eval scores the confidence a reader is shown
+    # rather than a re-derivation of it.
+    report = Report(job=JobRef(name=case.id, source="file"), distilled=distilled, hits=hits)
     return CaseResult(
         case=case,
         top_rule=fired[0] if fired else None,
@@ -113,6 +137,7 @@ def evaluate_case(case: CorpusCase) -> CaseResult:
         reduction=distilled.stats.reduction,
         fired_rules=fired,
         predicted_class=classify_hits(hits).failure_class,
+        confidence=assess(report).confidence,
     )
 
 
@@ -175,6 +200,17 @@ class EvalReport:
             if self.results
             else 0.0
         )
+
+    def confidence_scores(self) -> list[ConfidenceScore]:
+        """Class accuracy per confidence level, highest first; every level listed."""
+        return [
+            ConfidenceScore(
+                confidence=level,
+                cases=sum(r.confidence is level for r in self.results),
+                classes=sum(r.confidence is level and r.class_correct for r in self.results),
+            )
+            for level in sorted(Confidence, key=rank, reverse=True)
+        ]
 
     def class_scores(self) -> list[ClassScore]:
         by_class: dict[str, list[CaseResult]] = {}
@@ -263,6 +299,14 @@ def format_report(report: EvalReport) -> str:
         f"exit code {report.exit_code_accuracy:.1%}",
     ]
 
+    lines += ["", "Class accuracy by confidence"]
+    for level in report.confidence_scores():
+        rate = f"{level.classes / level.cases:.0%}" if level.cases else "-"
+        note = "  needs human review" if level.needs_review else ""
+        lines.append(
+            f"  {level.confidence.value:<8} {_bar(level.classes, level.cases):>7} {rate:>5}{note}"
+        )
+
     # Not part of the three rates - gap cases are excluded from all of them -
     # so it would otherwise only appear as a line buried in the gaps section.
     if report.gap_false_positives:
@@ -324,6 +368,15 @@ def eval_report_to_dict(report: EvalReport) -> dict[str, object]:
             "gaps": len(report.gaps),
             "gap_false_positives": len(report.gap_false_positives),
         },
+        "by_confidence": [
+            {
+                "confidence": level.confidence.value,
+                "cases": level.cases,
+                "classes": level.classes,
+                "needs_review": level.needs_review,
+            }
+            for level in report.confidence_scores()
+        ],
         "by_class": [
             {
                 "failure_class": score.failure_class,

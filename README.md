@@ -25,6 +25,11 @@ pipelinemd does two things about that:
    must cite the evidence lines it relied on. A diagnosis that cites nothing
    real is rejected rather than reported.
 
+Every report says how far to trust it and what it cost. The **confidence** is
+never more than the weakest signal behind it; at low, the report says **needs
+human review** and why. The **cost** is $0 for rules alone, and an estimate
+from the API's own token counts when Claude was asked.
+
 The first half needs no API key, no model, and **no third-party packages at
 all**. The second is the upgrade.
 
@@ -35,6 +40,8 @@ pipelinemd  build (test) #98765
   acme/web · ref main · exit code 1 · 47s
   ERROR: Job failed: exit code 1
   test → code_patch  ·  high  ·  from npm.lockfile-out-of-sync
+  confidence high
+  est. cost $0.0519 · claude-opus-5 · 5,210 in / 1,034 out tokens
 
 Diagnosis   high confidence · dependency
 
@@ -210,6 +217,11 @@ For how the pieces fit together, see [docs/architecture.md](docs/architecture.md
   Cite nothing real and the diagnosis is rejected; cite a mix and the invented
   numbers are printed alongside it. Confident prose is easy; a claim you can
   check is the product.
+- **Confidence is earned, not asserted.** An analysis is only as confident as
+  its weakest part — the rule, the model's own rating — and loses a level for
+  each sign of trouble. It stays high/medium/low: a decimal would claim a
+  calibration nothing here has, and `make eval` reports how often each level
+  is right instead.
 - **The distiller is pure.** No clock, no network, no randomness.
 
 ## Contributing a rule

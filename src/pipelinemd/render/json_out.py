@@ -5,12 +5,15 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from ..models import Classification, Report
+from ..assessment import REVIEW_BELOW, Assessment, assess
+from ..cost import PRICES_AS_OF, PRICING_SOURCE, Cost, call_cost, cost_of
+from ..models import Classification, Report, Usage
 from ..taxonomy import class_of, classify
 
 #: Bumped only for a change that breaks an existing reader. Adding a key is
-#: not one: `classification` and the per-hit `failure_class` arrived in #17
-#: without a bump, because a reader that ignores unknown keys is unaffected.
+#: not one: `classification` and the per-hit `failure_class` arrived in #17,
+#: and `assessment` and `cost` in #18, without a bump, because a reader that
+#: ignores unknown keys is unaffected.
 SCHEMA_VERSION = 1
 
 
@@ -32,6 +35,49 @@ def classification_to_dict(classification: Classification) -> dict[str, Any]:
             if retry is not None
             else None
         ),
+    }
+
+
+def assessment_to_dict(assessment: Assessment) -> dict[str, Any]:
+    return {
+        "confidence": assessment.confidence.value,
+        "needs_review": assessment.needs_review,
+        # What `needs_review` was measured against, so a reader holding the
+        # confidence can tell which side of the bar it fell.
+        "review_below": REVIEW_BELOW.value,
+        "reasons": list(assessment.reasons),
+    }
+
+
+def usage_to_dict(usage: Usage) -> dict[str, Any]:
+    return {
+        "input_tokens": usage.input_tokens,
+        "output_tokens": usage.output_tokens,
+        "cache_creation_input_tokens": usage.cache_creation_input_tokens,
+        "cache_read_input_tokens": usage.cache_read_input_tokens,
+    }
+
+
+def _usd(value: float | None) -> float | None:
+    return None if value is None else round(value, 6)
+
+
+def cost_to_dict(cost: Cost) -> dict[str, Any]:
+    return {
+        # An estimate from list prices; null when a model has no price on file.
+        "estimated_usd": _usd(cost.usd),
+        "prices_as_of": PRICES_AS_OF,
+        "pricing_source": PRICING_SOURCE,
+        "unpriced_models": list(cost.unpriced_models),
+        # Summed over the calls, and the input total counts cached tokens too:
+        # everything the model was shown. Per call, the API's own split.
+        "total_input_tokens": cost.input_tokens,
+        "total_output_tokens": cost.output_tokens,
+        "discarded_calls": cost.discarded,
+        "calls": [
+            {"model": call.model, **usage_to_dict(call), "estimated_usd": _usd(call_cost(call))}
+            for call in cost.calls
+        ],
     }
 
 
@@ -119,6 +165,8 @@ def report_to_dict(report: Report) -> dict[str, Any]:
             for hit in report.hits
         ],
         "classification": classification_to_dict(classify(report)),
+        "assessment": assessment_to_dict(assess(report)),
+        "cost": cost_to_dict(cost_of(report)),
         "diagnosis": None,
     }
 
@@ -145,10 +193,7 @@ def report_to_dict(report: Report) -> dict[str, Any]:
             "unresolved_citations": list(diagnosis.unresolved_citations),
             "fully_grounded": diagnosis.fully_grounded,
             "model": diagnosis.model,
-            "usage": {
-                "input_tokens": diagnosis.input_tokens,
-                "output_tokens": diagnosis.output_tokens,
-            },
+            "usage": usage_to_dict(diagnosis.usage),
         }
     return payload
 

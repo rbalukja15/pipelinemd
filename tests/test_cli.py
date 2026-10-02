@@ -424,6 +424,54 @@ def test_a_failed_diagnosis_is_not_fatal(monkeypatch: pytest.MonkeyPatch) -> Non
     assert "Rules were still applied" in err
 
 
+def test_a_diagnosis_turned_down_after_billing_is_still_costed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#18: the analysis cost what the call cost, even with no diagnosis to show."""
+    from pipelinemd.errors import DiagnosisError
+    from pipelinemd.models import Usage
+
+    spent = Usage(model="claude-opus-5", input_tokens=1000, output_tokens=100)
+    monkeypatch.setattr(cli, "llm_available", lambda: True)
+    monkeypatch.setattr(
+        cli,
+        "run_diagnosis",
+        lambda *a, **k: (_ for _ in ()).throw(DiagnosisError("ungrounded", usage=spent)),
+    )
+    code, out, _err = run("diagnose", "--from-file", str(TRACES / "npm_eresolve.log"), "-f", "json")
+    assert code == EXIT_OK
+    payload = json.loads(out)
+    assert payload["diagnosis"] is None
+    assert payload["cost"]["discarded_calls"] == 1
+    assert payload["cost"]["estimated_usd"] == pytest.approx(0.005 + 0.0025)
+
+
+def test_a_call_that_never_reached_the_model_costs_nothing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pipelinemd.errors import DiagnosisError
+
+    monkeypatch.setattr(cli, "llm_available", lambda: True)
+    monkeypatch.setattr(
+        cli,
+        "run_diagnosis",
+        lambda *a, **k: (_ for _ in ()).throw(DiagnosisError("no credentials")),
+    )
+    code, out, _err = run("diagnose", "--from-file", str(TRACES / "npm_eresolve.log"), "-f", "json")
+    assert code == EXIT_OK
+    assert json.loads(out)["cost"]["calls"] == []
+
+
+def test_every_report_shows_a_confidence_and_a_cost() -> None:
+    """#18's acceptance criterion, on the default output."""
+    code, out, _err = run(
+        "diagnose", "--from-file", str(TRACES / "npm_eresolve.log"), "--no-llm", "--color", "never"
+    )
+    assert code == EXIT_OK
+    assert "confidence high" in out
+    assert "cost $0" in out
+
+
 def test_missing_anthropic_package_is_explained(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(cli, "llm_available", lambda: False)
     code, out, err = run("diagnose", "--from-file", str(TRACES / "npm_eresolve.log"))

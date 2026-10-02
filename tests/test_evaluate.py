@@ -371,3 +371,54 @@ def test_json_reports_class_accuracy_and_each_miss(tmp_path: Path) -> None:
     assert miss["labelled"] == "yaml"
     assert miss["predicted"] == "test"
     assert miss["reason"] == "npm.eresolve maps to test"
+
+
+# -- confidence (#18) -------------------------------------------------------
+
+
+def test_confidence_scores_partition_the_corpus() -> None:
+    levels = REPORT.confidence_scores()
+    assert [level.confidence.value for level in levels] == ["high", "medium", "low"]
+    assert sum(level.cases for level in levels) == len(REPORT.results)
+    assert sum(level.classes for level in levels) == sum(r.class_correct for r in REPORT.results)
+
+
+def test_a_case_carries_the_confidence_a_reader_would_be_shown(tmp_path: Path) -> None:
+    report = run_eval(_mini(tmp_path, expected_rule="npm.eresolve", marker="ERESOLVE"))
+    assert report.results[0].confidence.value == "high"
+
+
+def test_a_gap_is_low_confidence() -> None:
+    """Nothing fired, so the analysis is the tool admitting it does not know."""
+    assert {gap.confidence.value for gap in REPORT.gaps} == {"low"}
+
+
+def test_the_level_that_needs_review_is_named_in_the_report() -> None:
+    text = format_report(REPORT)
+    assert "Class accuracy by confidence" in text
+    low = next(line for line in text.splitlines() if line.strip().startswith("low "))
+    assert "needs human review" in low
+    high = next(line for line in text.splitlines() if line.strip().startswith("high "))
+    assert "needs human review" not in high
+
+
+def test_json_reports_class_accuracy_by_confidence() -> None:
+    by_confidence = eval_report_to_dict(REPORT)["by_confidence"]
+    assert isinstance(by_confidence, list)
+    assert [row["confidence"] for row in by_confidence] == ["high", "medium", "low"]
+    assert [row["needs_review"] for row in by_confidence] == [False, False, True]
+
+
+def test_low_confidence_is_right_less_often_than_the_levels_shown_without_review() -> None:
+    """The premise of the review threshold, checked against the corpus.
+
+    Not a tuning target: if a corpus change breaks it, the threshold is what
+    needs revisiting, and the numbers are in docs/evaluation.md.
+    """
+    rates = {
+        level.confidence.value: level.classes / level.cases
+        for level in REPORT.confidence_scores()
+        if level.cases
+    }
+    assert rates["low"] < rates["medium"]
+    assert rates["low"] < rates["high"]
