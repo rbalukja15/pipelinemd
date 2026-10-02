@@ -26,6 +26,7 @@ local file ─┘                                                     │       
 | `distill/extract.py` | Score lines, grow windows, spend the budget, collapse repeats. |
 | `rules/catalog.py` | 59 failure signatures with fixes. Data, not code. |
 | `rules/engine.py` | Apply the catalog, rank the hits. |
+| `taxonomy.py` | Place a failure in the v1 taxonomy, and pick its fix type. The rule-to-class table lives here. |
 | `diagnose/prompt.py` | Build the request. Owns the JSON schema. |
 | `diagnose/citations.py` | Resolve the line numbers a diagnosis cited back to real evidence lines. |
 | `diagnose/claude.py` | Make the call. Never fatal. |
@@ -107,6 +108,50 @@ job. Four mechanisms address it:
 - **The model.** Rules cannot tell which of two genuine errors is upstream of
   the other. That judgement is the one thing the LLM layer is asked for, and the
   prompt says so explicitly.
+
+## The v1 taxonomy: which layer decides what
+
+Every report carries a **class** from the v1 taxonomy (#17) and a **fix type**
+(#15): `yaml_patch`, `code_patch`, `infra` or `flaky_retry`. The class is
+coarser than a rule's category, on purpose — `dependency` and `lint` are
+useful categories, but for v1 both mean "the project's own code failed", so
+both are in `test`.
+
+Two signals decide the class, and both are reproducible:
+
+- **The top rule's base class**, from one table in `taxonomy.py` covering all
+  59 rules, so the decisions can be reviewed side by side. A test fails if a
+  rule is added without an entry. Only the *top* rule counts: if it falls
+  outside v1 the failure is unclassified, rather than falling through to a
+  lower hit — which the engine has already ranked as a weaker explanation, and
+  which is often the top hit's own fallout.
+- **Retry history.** Every attempt of a job in one pipeline ran against the
+  same commit, so if another attempt passed, the job is flaky. That is
+  GitLab's own record, fetched once per pipeline with `include_retried=true`,
+  and it overrides the rule. A rule that is transient by nature (a timeout, a
+  DNS failure) but failed identically on every attempt keeps its class and
+  drops to low confidence.
+
+**The model does not decide the class**, even where the rules are silent. Its
+reading is recorded on the diagnosis — restricted by the schema to the v1
+classes plus `unclassified`, with `flaky` excluded because a single log
+cannot show a job would have passed on retry — and it is shown when it
+disagrees. It is never applied, because of what the class controls:
+
+```
+class → fix type → yaml_patch → #24 opens an MR
+```
+
+`yaml_patch` is the one value that can lead to an automated write, so it has
+to come from a signal that gives the same answer twice. For the same reason it
+is reserved for the `yaml` class alone. Every class whose fixes are mixed gets
+the conservative type: a false `yaml_patch` invites an automated MR, while a
+false `infra` just means a person does the work.
+
+The classification is derived from the report on demand rather than stored on
+it. A report is rebuilt with `dataclasses.replace` when the diagnosis arrives,
+and a stored classification would have to be recomputed every time — silently
+wrong the one time someone forgets.
 
 ## Grounding: a diagnosis must point at something
 

@@ -9,6 +9,7 @@ seconds, and gives the same answer every time.
 | Metric | Question |
 | --- | --- |
 | **rule@1** | Did the rule the corpus expects rank *first*? Scored only over labelled cases. |
+| **class** | Did the classifier put the case in the v1 class the corpus labels? Scored over *every* case: a gap has no expected rule, but it does have a class. |
 | **evidence** | Did the line a human would point at survive distillation into the excerpt? |
 | **exit code** | Did the distiller read the runner's verdict correctly? |
 
@@ -26,28 +27,41 @@ how the failure was written, so it really can drop the line that matters.
 ```
 pipelinemd eval — 62 cases (62 authored)
 
-class            cases   rule@1  evidence  exit code
----------------- ----- -------- --------- ----------
-cache_artifact       8      7/7       8/8        8/8
-ci_vars              8      8/8       8/8        8/8
-flaky                9      8/8       9/9        9/9
-image_pull          10    10/10     10/10      10/10
-runner              10    10/10     10/10      10/10
-test                 9      6/6       9/9        9/9
-yaml                 8      6/6       8/8        8/8
----------------- ----- -------- --------- ----------
-overall             62    55/55     62/62      62/62
+class            cases   rule@1   class  evidence  exit code
+---------------- ----- -------- ------- --------- ----------
+cache_artifact       8      7/7     7/8       8/8        8/8
+ci_vars              8      8/8     8/8       8/8        8/8
+flaky                9      8/8     5/9       9/9        9/9
+image_pull          10    10/10    9/10     10/10      10/10
+runner              10    10/10   10/10     10/10      10/10
+test                 9      6/6     6/9       9/9        9/9
+yaml                 8      6/6     6/8       8/8        8/8
+---------------- ----- -------- ------- --------- ----------
+overall             62    55/55   51/62     62/62      62/62
 
-rule@1 100.0%  ·  evidence 100.0%  ·  exit code 100.0%
+rule@1 100.0%  ·  class 82.3%  ·  evidence 100.0%  ·  exit code 100.0%
 
 Known gaps — no rule covers these (7)
-  yaml-yamllint-indentation     correctly silent
-  yaml-empty-variable-expansion correctly silent
-  artifact-too-large            correctly silent
-  test-rspec-failure            correctly silent
-  test-vitest-failure           correctly silent
-  test-phpunit-failure          correctly silent
-  flaky-gitlab-502              correctly silent
+  yaml-yamllint-indentation       correctly silent
+  yaml-empty-variable-expansion   correctly silent
+  artifact-too-large              correctly silent
+  test-rspec-failure              correctly silent
+  test-vitest-failure             correctly silent
+  test-phpunit-failure            correctly silent
+  flaky-gitlab-502                correctly silent
+
+Class misses (11)
+  yaml-yamllint-indentation       labelled yaml — got unclassified (no rule fired)
+  yaml-empty-variable-expansion   labelled yaml — got unclassified (no rule fired)
+  imagepull-registry-unauthorized labelled image_pull — got ci_vars (docker.push-denied maps to ci_vars)
+  artifact-too-large              labelled cache_artifact — got unclassified (no rule fired)
+  test-rspec-failure              labelled test — got unclassified (no rule fired)
+  test-vitest-failure             labelled test — got unclassified (no rule fired)
+  test-phpunit-failure            labelled test — got unclassified (no rule fired)
+  flaky-tls-unknown-authority     labelled flaky — got runner (net.tls is not transient by nature, so only retry history could make it flaky, and the corpus carries none)
+  flaky-runner-lost               labelled flaky — got runner (runner.system-failure is not transient by nature, so only retry history could make it flaky, and the corpus carries none)
+  flaky-test-passes-on-retry      labelled flaky — got test (test.jest-failed is not transient by nature, so only retry history could make it flaky, and the corpus carries none)
+  flaky-gitlab-502                labelled flaky — got unclassified (no rule fired)
 
 Every case is authored, not observed. These numbers are a regression
 signal, not a measurement of real-world accuracy — see corpus/README.md.
@@ -219,6 +233,72 @@ correctly. It does not mean the tool is right in the wild, and the number will
 drop the first time a real trace lands — which is the intended direction of
 travel, not a regression. See below.
 
+## The class metric (#17)
+
+`class` arrived with the v1 taxonomy. Its first run was **49/60 — 81.7%**, and
+per the rule this document follows, **nothing was tuned to move it**: no label
+was changed and no mapping entry was adjusted after the number appeared. It is
+now **51/62 — 82.3%**: the two cases added to pin the verdict ranking in #42
+both land in their labelled class, and nothing else moved. Every miss is
+explained below, and all four that are not coverage gaps are findings rather
+than fixes.
+
+### How the class is decided
+
+From the log and from GitLab's records, never from the model:
+
+1. **Retry history.** If another attempt of the same job, in the same
+   pipeline, passed, the job is `flaky` — same commit, different outcome. This
+   overrides the rule.
+2. **The top rule's base class**, from one table in `src/pipelinemd/taxonomy.py`
+   that lists all 59 rules. No rule is `flaky` unless it is transient by its
+   nature; a timing-dependent test or a runner that fell over only becomes
+   flaky through retry history.
+3. **Otherwise `unclassified`**, always at low confidence.
+
+The model's reading is recorded on its diagnosis and shown when it disagrees,
+but it does not decide the class. The class sets the fix type, `yaml_patch` is
+what #24's MR generator acts on, and anything that can lead to an automated
+write has to come from a signal that gives the same answer twice.
+
+**The mapping was written after seeing the corpus labels**, so it is fair to
+ask whether it was fitted to them. The arithmetic answers it. Three rules carry
+two different labels across corpus cases, so any static rule-to-class table
+must miss one case from each pair: **the best a table fitted to these labels
+could score is 52/62** (50/60 before #42's two cases). This one scores 51. The
+one case it gives up beyond
+that ceiling is `net.tls`, where it disagrees with the label on the facts —
+see below. Where a rule's meaning is unambiguous the table agrees with the
+labels; where it is not, it was chosen from the rule's meaning.
+
+### The eleven misses
+
+| | cases | why |
+| --- | --- | --- |
+| Coverage gaps | 7 | No rule fires, so the class is `unclassified`. The same seven cases as the rule@1 gaps; a new rule fixes both numbers at once. |
+| Needs retry history | 2 | `flaky-runner-lost` and `flaky-test-passes-on-retry`. Their logs are an ordinary runner failure and an ordinary Jest failure; only a passing retry shows they are flaky, and the corpus is single traces. The second case's own note, written before this existed, says exactly that. |
+| Catalog precision | 1 | `imagepull-registry-unauthorized` is a **pull**, but `docker.push-denied` wins it, because that rule also matches `unauthorized: authentication required` — which registries return for pulls too. The push rule is mapped to `ci_vars`, so the pull lands there. The same family of bug as pytest claiming Jest's output. |
+| Label in question | 1 | `flaky-tls-unknown-authority` is labelled `flaky`, but its own note says the CA is missing from the image's trust store — which fails on every run. The mapping puts `net.tls` in `runner`, the environment. Retry history would show every attempt failing, confirming `runner` rather than overturning it. |
+
+The last two are the ones to act on, separately:
+
+- **`docker.push-denied` should stop matching pulls**, and the corpus case then
+  expects `docker.pull-denied`. That is a rule@1 change as much as a class one.
+- **`flaky-tls-unknown-authority` should probably be relabelled `runner`**, by
+  the standard applied in #42: a label may be corrected when it was wrong about
+  the failure. It is not corrected here, because this is the change that
+  introduces the metric.
+
+### What the eval cannot see
+
+Retry history is the one signal the corpus cannot exercise — every case is a
+single trace. It is covered by unit tests and by end-to-end CLI tests against
+a stubbed GitLab, but the eval number says nothing about it. Adding
+`retry_statuses` to corpus records would change that, but for authored cases
+it would mean inventing the history, and it would flip two misses in the same
+change that introduces the measurement. Both are reasons to wait for observed
+traces.
+
 ## Reading the number honestly
 
 Every case is currently `provenance: authored`. The failures and the labels
@@ -249,7 +329,7 @@ pipelinemd eval --corpus path/to/other      # score a different corpus
 `--min-rule-accuracy` would be a flag nobody runs, and everything above would
 be a report rather than a guard.
 
-Two thresholds, set in the [Makefile](../Makefile):
+Three thresholds, set in the [Makefile](../Makefile):
 
 **`MIN_RULE_ACCURACY = 0.92`.** Raised from 0.85 now that rule@1 is 55/55: 0.92
 is 51/55, so the build fails on the fifth regression. The headroom is still
@@ -265,6 +345,16 @@ merge on their own, and the per-case regression tests in
 traces will eventually push the rate under this floor; the right response is to
 lower it in a commit that says why, so the number moves in review rather than
 silently.
+
+**`MIN_CLASS_ACCURACY = 0.78`.** Class is 51/62 today; 0.78 is 49/62, so the
+build fails on the third regression. Of the four metrics this is the one with
+the sharpest downside: the class selects the fix type, `yaml_patch` is what
+#24's MR generator acts on, and a mapping change that quietly regresses
+classification would otherwise move a printed number and fail nothing. It
+arrived with the metric, after review pointed out that promoting `class` to a
+headline number without gating it repeated the gap-false-positive mistake from
+#41. As with the rule floor, lowering it in a commit that says why is the
+intended response to adding hard traces.
 
 **`MAX_GAP_FALSE_POSITIVES = 0`.** Known gaps are excluded from every rate, so
 a rule that starts firing on one moves *no number at all* — `--min-rule-accuracy`

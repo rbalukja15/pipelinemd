@@ -16,7 +16,7 @@ from pipelinemd.diagnose.prompt import (
 )
 from pipelinemd.distill import distill
 from pipelinemd.errors import DiagnosisError
-from pipelinemd.models import Category, Confidence, JobRef
+from pipelinemd.models import Category, Confidence, FailureClass, JobRef
 from pipelinemd.rules import match_rules
 
 PAYLOAD = {
@@ -24,6 +24,7 @@ PAYLOAD = {
     "root_cause": "Line 2 shows ERESOLVE while resolving react.",
     "confidence": "high",
     "category": "dependency",
+    "failure_class": "test",
     "evidence_lines": [2],
     "fixes": [
         {"title": "Regenerate the lockfile", "detail": "Run npm install.", "patch": "npm install"},
@@ -219,3 +220,38 @@ def test_schema_is_strict() -> None:
     items = DIAGNOSIS_SCHEMA["properties"]["fixes"]["items"]  # type: ignore[index]
     assert items["additionalProperties"] is False
     assert set(items["required"]) == {"title", "detail", "patch"}
+
+
+# -- failure class (#17) ----------------------------------------------------
+
+
+def test_schema_restricts_the_class_to_known_values_and_requires_it() -> None:
+    """#17: diagnosis output is restricted to known classes."""
+    field = DIAGNOSIS_SCHEMA["properties"]["failure_class"]  # type: ignore[index]
+    assert "failure_class" in DIAGNOSIS_SCHEMA["required"]  # type: ignore[operator]
+    assert set(field["enum"]) == {c.value for c in FailureClass} - {"flaky"}
+
+
+def test_prompt_tells_the_model_flaky_is_not_its_call() -> None:
+    assert "retry history" in SYSTEM_PROMPT
+    assert "unclassified" in SYSTEM_PROMPT
+
+
+def test_diagnosis_carries_the_models_class(distilled: Any) -> None:
+    client = _Client(_Response([_Block("text", json.dumps(PAYLOAD))]))
+    result = diagnose(JobRef(name="build"), distilled, match_rules(distilled), client=client)
+    assert result.failure_class is FailureClass.TEST
+
+
+@pytest.mark.parametrize("value", ["flaky", "network", None])
+def test_a_class_the_model_may_not_give_reads_as_unclassified(
+    distilled: Any, value: object
+) -> None:
+    """Constrained decoding should prevent these; if one arrives, it is not trusted."""
+    payload = {**PAYLOAD, "failure_class": value}
+    if value is None:
+        del payload["failure_class"]
+    client = _Client(_Response([_Block("text", json.dumps(payload))]))
+    result = diagnose(JobRef(name="build"), distilled, match_rules(distilled), client=client)
+    assert result.failure_class is FailureClass.UNCLASSIFIED
+    assert result.confidence is Confidence.HIGH, "the root-cause confidence is the model's own"

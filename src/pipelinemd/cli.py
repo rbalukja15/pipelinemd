@@ -26,7 +26,7 @@ from .distill.extract import DEFAULT_MAX_LINES, DEFAULT_TAIL_LINES, DEFAULT_THRE
 from .errors import DiagnosisError, GitLabError, PipelinemdError, UsageError
 from .evaluate import eval_report_to_dict, format_report, run_eval
 from .gitlab import GitLabClient, Target, parse_target, rebase, target_from_parts
-from .models import JobRef, Report
+from .models import JobRef, Report, RetryHistory
 from .render import ColorChoice, make_style, render_markdown, render_terminal
 from .render.json_out import report_to_dict
 from .rules import ALL_RULES, get_rule, match_rules
@@ -187,7 +187,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="Score the deterministic pipeline against the labelled corpus.",
         description=(
             "Runs the distiller and rule engine over every labelled case and reports "
-            "rule@1, evidence hit rate and exit-code accuracy per failure class. "
+            "rule@1, class accuracy, evidence hit rate and exit-code accuracy per "
+            "failure class. "
             "Offline and deterministic: the LLM layer is not scored, so the same "
             "corpus always gives the same numbers."
         ),
@@ -204,6 +205,15 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         metavar="RATE",
         help="Exit non-zero if rule@1 falls below this (0-1); use as a regression gate.",
+    )
+    eval_parser.add_argument(
+        "--min-class-accuracy",
+        type=float,
+        metavar="RATE",
+        help=(
+            "Exit non-zero if class accuracy falls below this (0-1). The class selects "
+            "the fix type, and yaml_patch is what an automated MR acts on."
+        ),
     )
     eval_parser.add_argument(
         "--max-gap-false-positives",
@@ -344,6 +354,39 @@ def _maybe_diagnose(
     return replace(report, diagnosis=diagnosis)
 
 
+def _retry_history(
+    client: GitLabClient,
+    project: str,
+    pipeline_id: int | None,
+    job: dict[str, Any],
+    cache: dict[int, list[dict[str, Any]]],
+    stderr: IO[str],
+) -> RetryHistory | None:
+    """Every attempt of this job in its pipeline, oldest first.
+
+    One request per pipeline, however many of its jobs are diagnosed. A failure
+    here costs the flaky signal and nothing else: the rules and the diagnosis
+    do not depend on it, so it is noted rather than raised.
+    """
+    if pipeline_id is None:
+        return None
+    if pipeline_id not in cache:
+        try:
+            cache[pipeline_id] = client.list_pipeline_jobs(
+                project, pipeline_id, include_retried=True
+            )
+        except GitLabError as exc:
+            stderr.write(f"note: could not read retry history ({exc}); flaky detection skipped.\n")
+            cache[pipeline_id] = []
+    attempts = sorted(
+        (other for other in cache[pipeline_id] if other.get("name") == job.get("name")),
+        key=lambda other: other.get("id") or 0,
+    )
+    if not attempts:
+        return None
+    return RetryHistory(statuses=tuple(str(other.get("status") or "") for other in attempts))
+
+
 # ---------------------------------------------------------------------------
 # Commands
 # ---------------------------------------------------------------------------
@@ -420,6 +463,7 @@ def cmd_diagnose(args: argparse.Namespace, stdout: IO[str], stderr: IO[str], std
             jobs = jobs[:MAX_JOBS_DEFAULT]
 
     reports: list[Report] = []
+    pipelines: dict[int, list[dict[str, Any]]] = {}
     for job in jobs:
         job_ref = client.job_ref(job, target.project)
         raw = client.get_trace(target.project, int(job["id"]))
@@ -429,7 +473,13 @@ def cmd_diagnose(args: argparse.Namespace, stdout: IO[str], stderr: IO[str], std
             max_lines=args.max_evidence_lines,
             tail_lines=args.tail_lines,
         )
-        report = Report(job=job_ref, distilled=distilled, hits=match_rules(distilled))
+        pipeline_id = job_ref.pipeline_id or (None if target.is_job else target.id)
+        report = Report(
+            job=job_ref,
+            distilled=distilled,
+            hits=match_rules(distilled),
+            retry=_retry_history(client, target.project, pipeline_id, job, pipelines, stderr),
+        )
         ci_config = (
             client.get_ci_config(target.project, job_ref.ref or "HEAD")
             if args.with_ci_config
@@ -497,6 +547,9 @@ def cmd_eval(args: argparse.Namespace, stdout: IO[str], stderr: IO[str], stdin: 
     floor = args.min_rule_accuracy
     if floor is not None and not 0.0 <= floor <= 1.0:
         raise UsageError(f"--min-rule-accuracy takes a rate between 0 and 1, not {floor:g}.")
+    class_floor = args.min_class_accuracy
+    if class_floor is not None and not 0.0 <= class_floor <= 1.0:
+        raise UsageError(f"--min-class-accuracy takes a rate between 0 and 1, not {class_floor:g}.")
     ceiling = args.max_gap_false_positives
     if ceiling is not None and ceiling < 0:
         raise UsageError(f"--max-gap-false-positives cannot be negative, got {ceiling}.")
@@ -514,6 +567,11 @@ def cmd_eval(args: argparse.Namespace, stdout: IO[str], stderr: IO[str], stdin: 
     failed = False
     if floor is not None and report.rule_accuracy < floor:
         stderr.write(f"rule@1 {report.rule_accuracy:.1%} is below the required {floor:.1%}.\n")
+        failed = True
+    if class_floor is not None and report.class_accuracy < class_floor:
+        stderr.write(
+            f"class {report.class_accuracy:.1%} is below the required {class_floor:.1%}.\n"
+        )
         failed = True
     false_positives = len(report.gap_false_positives)
     if ceiling is not None and false_positives > ceiling:

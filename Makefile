@@ -21,6 +21,14 @@ PYTEST_ARGS ?=
 # it makes the number move in review rather than silently.
 MIN_RULE_ACCURACY ?= 0.92
 
+# The class floor. Class is the input to the fix type, and yaml_patch is what
+# #24's MR generator acts on, so a regression here is the one with the sharpest
+# downside - it should fail a build, not just move a printed number. Class is
+# 51/62 today; 0.78 is 49/62, so the gate trips on the third regression. Same
+# rule as above: lowering it in a commit that says why is the intended response
+# to adding hard traces, not a failure.
+MIN_CLASS_ACCURACY ?= 0.78
+
 # Known gaps are excluded from every rate, so a rule that starts firing on one
 # moves no number. Zero tolerance here: the catalog growing a confident wrong
 # answer where it used to stay silent is a regression worth failing over.
@@ -35,7 +43,7 @@ help:
 	@echo "typecheck  mypy --strict"
 	@echo "test       pytest"
 	@echo "eval       score the deterministic pipeline against corpus/"
-	@echo "gate       eval, failing below rule@1 $(MIN_RULE_ACCURACY)"
+	@echo "gate       eval, failing below rule@1 $(MIN_RULE_ACCURACY) or class $(MIN_CLASS_ACCURACY)"
 	@echo "check      lint + typecheck + test + gate, the targets CI runs"
 
 install:
@@ -60,6 +68,7 @@ eval:
 gate:
 	$(PYTHON) -m pipelinemd eval \
 		--min-rule-accuracy $(MIN_RULE_ACCURACY) \
+		--min-class-accuracy $(MIN_CLASS_ACCURACY) \
 		--max-gap-false-positives $(MAX_GAP_FALSE_POSITIVES)
 
 check: lint typecheck test gate
