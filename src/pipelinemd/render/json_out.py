@@ -6,7 +6,7 @@ import json
 from typing import Any
 
 from ..assessment import REVIEW_BELOW, Assessment, assess
-from ..cost import PRICES_AS_OF, PRICING_SOURCE, Cost, call_cost, cost_of
+from ..cost import PRICES_AS_OF, PRICING_SOURCE, Cost, call_cost, cost_of, run_cost
 from ..models import Classification, Report, Usage
 from ..taxonomy import class_of, classify
 
@@ -196,6 +196,20 @@ def report_to_dict(report: Report) -> dict[str, Any]:
             "usage": usage_to_dict(diagnosis.usage),
         }
     return payload
+
+
+def run_to_dict(reports: list[Report]) -> dict[str, Any]:
+    """Several reports, with the cost of the run as a whole beside them.
+
+    The run total pools every call, so it is `null` if any report's is - the
+    same rule as within a report. Without it, the obvious consumer adds up the
+    per-report figures it can read and gets a partial sum that looks whole.
+    """
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "reports": [report_to_dict(report) for report in reports],
+        "cost": cost_to_dict(run_cost(reports)),
+    }
 
 
 def render_json(report: Report, *, indent: int | None = 2) -> str:

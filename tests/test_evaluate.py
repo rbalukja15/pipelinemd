@@ -410,8 +410,10 @@ def test_json_reports_class_accuracy_by_confidence() -> None:
 
 
 def test_low_confidence_is_right_less_often_than_the_levels_shown_without_review() -> None:
-    """The premise of the review threshold, checked against the corpus.
+    """The premise of the review threshold, for the classification signal.
 
+    That is the only input the eval exercises: it scores no diagnosis, so an
+    analysis demoted to low by the model's side is not in this population.
     Not a tuning target: if a corpus change breaks it, the threshold is what
     needs revisiting, and the numbers are in docs/evaluation.md.
     """

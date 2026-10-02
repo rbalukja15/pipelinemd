@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from ..assessment import Assessment, assess
-from ..cost import cost_of, describe_cost
+from ..cost import cost_of, describe_cost, run_cost
 from ..models import Classification, Confidence, EvidenceLine, Report, RuleHit
 from ..taxonomy import classify, model_disagreement
 from .evidence import gap_before, select_display_lines
@@ -246,3 +246,12 @@ def render_terminal(
     lines += _evidence(report, style, evidence_limit)
     lines.append("")
     return "\n".join(lines)
+
+
+def render_run_total(reports: list[Report], style: Style) -> str:
+    """The cost of a run of several analyses, under the last of them."""
+    return (
+        style.heading("Run total")
+        + style.dim(f"   {len(reports)} jobs · {describe_cost(run_cost(reports))}")
+        + "\n"
+    )

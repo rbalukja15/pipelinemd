@@ -27,10 +27,13 @@ from .taxonomy import classify, model_disagreement
 _ORDER: tuple[Confidence, ...] = (Confidence.LOW, Confidence.MEDIUM, Confidence.HIGH)
 
 #: An analysis below this is presented as needing human review, which makes
-#: low the only level under it. It is where the corpus draws the line: `make
-#: eval` reports class accuracy per level, and low is the one that is wrong
-#: more often than right. The JSON report carries the level as well as the
-#: flag, so a consumer that wants a stricter bar can apply one.
+#: low the only level under it. For the classification signal, the corpus
+#: draws the line here: `make eval` reports class accuracy per level, and low
+#: is the one that is wrong more often than right. The three diagnosis-side
+#: adjustments cannot occur in the eval, which scores no diagnosis, so sending
+#: an analysis they demoted to review is a judgement, not a measurement - see
+#: docs/evaluation.md. The JSON report carries the level as well as the flag,
+#: so a consumer that wants a stricter bar can apply one.
 REVIEW_BELOW = Confidence.MEDIUM
 
 

@@ -27,8 +27,15 @@ from .errors import DiagnosisError, GitLabError, PipelinemdError, UsageError
 from .evaluate import eval_report_to_dict, format_report, run_eval
 from .gitlab import GitLabClient, Target, parse_target, rebase, target_from_parts
 from .models import JobRef, Report, RetryHistory
-from .render import ColorChoice, make_style, render_markdown, render_terminal
-from .render.json_out import report_to_dict
+from .render import (
+    ColorChoice,
+    make_style,
+    render_markdown,
+    render_markdown_run_total,
+    render_run_total,
+    render_terminal,
+)
+from .render.json_out import report_to_dict, run_to_dict
 from .rules import ALL_RULES, get_rule, match_rules
 
 EXIT_OK = 0
@@ -265,18 +272,20 @@ def _render(
     stdout: IO[str],
 ) -> None:
     rule_limit = 999 if args.all_rules else 5
+    # Several reports get the run's cost beside them, so nobody has to add up
+    # per-report figures - see run_to_dict for why that sum goes wrong.
+    several = len(reports) != 1
     if args.format == "json":
-        payload: Any = (
-            [report_to_dict(report) for report in reports]
-            if len(reports) != 1
-            else report_to_dict(reports[0])
-        )
+        payload: Any = run_to_dict(reports) if several else report_to_dict(reports[0])
         text = json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
     elif args.format == "markdown":
-        text = "\n---\n\n".join(
+        sections = [
             render_markdown(report, rule_limit=rule_limit, evidence_limit=args.evidence_limit)
             for report in reports
-        )
+        ]
+        if several:
+            sections.append(render_markdown_run_total(reports))
+        text = "\n---\n\n".join(sections)
     else:
         # Writing to a file: "auto" must mean no colour. Deciding from
         # sys.stdout's tty-ness would embed escape codes in the file.
@@ -291,6 +300,8 @@ def _render(
             )
             for report in reports
         )
+        if several:
+            text += "\n" + render_run_total(reports, style)
     _write(text, args.output, stdout)
 
 

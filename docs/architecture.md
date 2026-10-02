@@ -212,8 +212,11 @@ model's word alone, and no fix type follows from it.
 
 At low the report says **needs human review**, with every reason the
 confidence fell, printed above the diagnosis so it is read first. The bar is
-`REVIEW_BELOW = medium`, chosen from the eval: low is the one level that is
-wrong more often than right (see [evaluation](evaluation.md#confidence-18)).
+`REVIEW_BELOW = medium`. For the classification signal it is chosen from the
+eval: low is the one level that is wrong more often than right. The eval
+scores no diagnosis, so for an analysis the model's side demoted to low, the
+bar is a judgement rather than a measurement (see
+[evaluation](evaluation.md#what-the-table-cannot-see)).
 JSON carries the level, the flag, the bar and the reasons, so a consumer that
 wants a stricter bar — #24 might open MRs only at high — applies its own.
 
@@ -234,9 +237,20 @@ the estimate honest:
   a neighbour's price, and one unpriced call makes the total unknown rather
   than a partial sum that looks whole.
 
+Every cost line ends with the date its prices were copied, because the
+estimate goes stale with them and a pasted report carries no other clue.
+
+With `--all-jobs`, the reports are followed by a **run total** that pools
+every call, so one unpriced call makes the run's total unknown — the same rule
+as within a report. In JSON several reports arrive as `{"schema_version",
+"reports", "cost"}` rather than a bare array, so the total has somewhere to
+sit; without it, the natural consumer adds up the per-report figures it can
+read and gets a partial sum that looks whole. One report is unchanged.
+
 What the estimate cannot see is anything a response does not report: Bedrock
-and Google Cloud pricing, US-only inference, negotiated rates. It is labelled
-an estimate everywhere it appears for that reason.
+and Google Cloud pricing, US-only inference, negotiated rates, and a call
+billed and then lost in transport, which never returns its usage. It is
+labelled an estimate everywhere it appears for that reason.
 
 ## Why the core has no dependencies
 

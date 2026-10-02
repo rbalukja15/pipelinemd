@@ -151,7 +151,7 @@ A ready-made job is in [`examples/gitlab-ci-diagnose.yml`](examples/gitlab-ci-di
 | --- | --- |
 | `terminal` (default) | Reading it yourself. Colour honours `NO_COLOR` and non-TTY output. |
 | `markdown` | Pasting into a merge request or issue. Collapsible evidence. |
-| `json` | Other tooling. Versioned via `schema_version`. |
+| `json` | Other tooling. Versioned via `schema_version`. One job is one report object; several (`--all-jobs`) are `{"reports": [...], "cost": {...}}`, with the run's total cost beside them. |
 
 ## How the distiller works
 

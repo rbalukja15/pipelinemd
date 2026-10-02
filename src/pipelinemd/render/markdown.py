@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from ..assessment import assess
-from ..cost import cost_of, describe_cost
+from ..cost import cost_of, describe_cost, run_cost
 from ..models import Confidence, Report
 from ..taxonomy import classify, model_disagreement
 from .evidence import gap_before, select_display_lines
@@ -147,3 +147,8 @@ def render_markdown(report: Report, *, rule_limit: int = 5, evidence_limit: int 
         out[-1] += f" · diagnosis by `{report.diagnosis.model}`"
     out[-1] += "</sub>"
     return "\n".join(out) + "\n"
+
+
+def render_markdown_run_total(reports: list[Report]) -> str:
+    """The cost of a run of several analyses, as its own closing section."""
+    return f"**Run total** · {len(reports)} jobs · {describe_cost(run_cost(reports))}\n"

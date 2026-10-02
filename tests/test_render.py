@@ -8,6 +8,7 @@ from dataclasses import replace
 
 import pytest
 
+from pipelinemd.cost import PRICES_AS_OF
 from pipelinemd.distill import distill
 from pipelinemd.models import (
     Category,
@@ -418,7 +419,7 @@ def test_terminal_shows_the_confidence_and_that_rules_cost_nothing(report: Repor
 def test_terminal_shows_the_estimated_cost_of_a_diagnosis(report: Report) -> None:
     """1,200 in and 400 out on Opus 5: $0.006 + $0.010."""
     out = render_terminal(_with(report, DIAGNOSIS), Style(enabled=False))
-    assert "est. cost $0.0160 · claude-opus-5 · 1,200 in / 400 out tokens" in out
+    assert "est. cost $0.0160 · claude-opus-5 · 1,200 in / 400 out tokens · prices as of" in out
 
 
 def test_terminal_sends_a_weak_analysis_to_review_and_says_why(report: Report) -> None:
@@ -439,7 +440,10 @@ def test_terminal_review_line_wraps_at_the_report_width(report: Report) -> None:
 def test_markdown_shows_the_confidence_and_cost(report: Report) -> None:
     out = render_markdown(_with(report, DIAGNOSIS))
     assert "**confidence** high" in out
-    assert "<sub>est. cost $0.0160 · claude-opus-5 · 1,200 in / 400 out tokens</sub>" in out
+    assert (
+        "<sub>est. cost $0.0160 · claude-opus-5 · 1,200 in / 400 out tokens · "
+        f"prices as of {PRICES_AS_OF}</sub>"
+    ) in out
     assert "Needs human review" not in out
 
 
@@ -504,3 +508,43 @@ def test_json_diagnosis_usage_gains_the_cache_counts(report: Report) -> None:
         "cache_creation_input_tokens": 0,
         "cache_read_input_tokens": 0,
     }
+
+
+# -- a run of several analyses (#18 review) ---------------------------------
+
+
+def test_json_for_several_reports_carries_the_run_cost(report: Report) -> None:
+    from pipelinemd.render import run_to_dict
+
+    payload = run_to_dict([_with(report, DIAGNOSIS), _with(report, DIAGNOSIS)])
+    assert payload["schema_version"] == 1
+    assert len(payload["reports"]) == 2
+    assert payload["cost"]["estimated_usd"] == pytest.approx(0.032)
+    assert len(payload["cost"]["calls"]) == 2
+
+
+def test_one_unpriced_report_makes_the_run_total_unknown(report: Report) -> None:
+    """The sum a consumer would write over per-report figures, refused one level up."""
+    from pipelinemd.render import run_to_dict
+
+    unpriced = replace(DIAGNOSIS, model="claude-opus-9")
+    payload = run_to_dict([_with(report, DIAGNOSIS), _with(report, unpriced)])
+    per_report = [r["cost"]["estimated_usd"] for r in payload["reports"]]
+    assert per_report == [pytest.approx(0.016), None]
+    assert payload["cost"]["estimated_usd"] is None
+    assert payload["cost"]["unpriced_models"] == ["claude-opus-9"]
+
+
+def test_terminal_run_total_states_the_jobs_and_the_cost(report: Report) -> None:
+    from pipelinemd.render import render_run_total
+
+    out = render_run_total([_with(report, DIAGNOSIS), report], Style(enabled=False))
+    assert out.startswith("Run total")
+    assert "2 jobs · est. cost $0.0160 · claude-opus-5" in out
+
+
+def test_markdown_run_total(report: Report) -> None:
+    from pipelinemd.render import render_markdown_run_total
+
+    out = render_markdown_run_total([report, report])
+    assert out == "**Run total** · 2 jobs · cost $0 — rules only, no model call\n"

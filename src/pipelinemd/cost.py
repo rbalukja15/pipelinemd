@@ -5,7 +5,9 @@ list prices for a standard request - global routing, standard speed, not
 batched - copied from the pricing page on `PRICES_AS_OF`. Amazon Bedrock and
 Google Cloud price separately, US-only inference (`inference_geo`) costs 1.1x,
 and negotiated rates are not visible from here. None of those can be read off
-a response, so the estimate does not pretend to account for them.
+a response, so the estimate does not pretend to account for them. Nor can a
+call that was billed and then lost in transport - a timeout mid-response -
+because no usage ever arrives for it.
 
 A model missing from the table gets no estimate at all - `None`, shown as
 "unknown" - rather than the price of whichever model looks closest. A wrong
@@ -61,7 +63,9 @@ PRICES: dict[str, Price] = {
 }
 
 #: `claude-haiku-4-5-20251001` is a dated snapshot of `claude-haiku-4-5`, and
-#: is billed the same.
+#: is billed the same. Google Cloud's `claude-opus-4-5@20251101` form is not
+#: matched on purpose: Google Cloud bills separately, so `unknown` is the right
+#: answer for it, not a first-party list price.
 _SNAPSHOT = re.compile(r"-\d{8}$")
 
 
@@ -128,6 +132,21 @@ def cost_of(report: Report) -> Cost:
     return Cost(calls=tuple(calls), discarded=len(report.discarded_calls))
 
 
+def run_cost(reports: list[Report] | tuple[Report, ...]) -> Cost:
+    """Every call behind a run of several analyses, as one Cost.
+
+    Pooling the calls rather than adding up per-report totals keeps the rule
+    `Cost.usd` already enforces: one unpriced call anywhere makes the run's
+    total unknown, instead of the partial sum a consumer adding up per-report
+    figures would get.
+    """
+    costs = [cost_of(report) for report in reports]
+    return Cost(
+        calls=tuple(call for cost in costs for call in cost.calls),
+        discarded=sum(cost.discarded for cost in costs),
+    )
+
+
 def format_usd(usd: float | None) -> str:
     """`$0.0412`; `$0` for no spend at all; `unknown` when it cannot be priced.
 
@@ -145,7 +164,10 @@ def format_usd(usd: float | None) -> str:
 def describe_cost(cost: Cost) -> str:
     """One line for a report.
 
-    `est. cost $0.0412 · claude-opus-5 · 5,210 in / 1,034 out tokens`
+    `est. cost $0.0412 · claude-opus-5 · 5,210 in / 1,034 out tokens · prices as of 2026-10-02`
+
+    The date is on the line because the estimate goes stale with it, and the
+    reader of a pasted report has no other way to tell how old the prices are.
     """
     if not cost.calls:
         return "cost $0 — rules only, no model call"
@@ -154,11 +176,13 @@ def describe_cost(cost: Cost) -> str:
         " + ".join(dict.fromkeys(c.model for c in cost.calls)),
     ]
     if len(cost.calls) > 1:
-        parts.append(f"{len(cost.calls)} calls, {cost.discarded} discarded")
+        discarded = f", {cost.discarded} discarded" if cost.discarded else ""
+        parts.append(f"{len(cost.calls)} calls{discarded}")
     elif cost.discarded:
         # Otherwise a report with a cost and no diagnosis reads as a mistake.
         parts.append("no diagnosis came of it")
     parts.append(f"{cost.input_tokens:,} in / {cost.output_tokens:,} out tokens")
     if cost.unpriced_models:
         parts.append(f"no price on file for {', '.join(cost.unpriced_models)}")
+    parts.append(f"prices as of {PRICES_AS_OF}")
     return " · ".join(parts)

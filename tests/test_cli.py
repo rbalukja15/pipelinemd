@@ -291,23 +291,55 @@ def test_diagnose_mentions_the_other_failed_jobs(monkeypatch: pytest.MonkeyPatch
     assert "--all-jobs" in err and "test" in err
 
 
-def test_diagnose_all_jobs_emits_a_json_list(monkeypatch: pytest.MonkeyPatch) -> None:
-    jobs = [
-        {"id": 1, "name": "build", "stage": "build", "status": "failed"},
-        {"id": 2, "name": "test", "stage": "test", "status": "failed"},
-    ]
-    monkeypatch.setattr(cli, "GitLabClient", lambda *a, **k: _FakeClient(jobs=jobs))
+_TWO_FAILED = [
+    {"id": 1, "name": "build", "stage": "build", "status": "failed"},
+    {"id": 2, "name": "test", "stage": "test", "status": "failed"},
+]
+
+
+def _all_jobs(monkeypatch: pytest.MonkeyPatch, *extra: str) -> tuple[int, str]:
+    monkeypatch.setattr(cli, "GitLabClient", lambda *a, **k: _FakeClient(jobs=_TWO_FAILED))
     code, out, _err = run(
-        "diagnose",
-        "https://gitlab.com/acme/web/-/pipelines/1",
-        "--all-jobs",
-        "--no-llm",
-        "--format",
-        "json",
+        "diagnose", "https://gitlab.com/acme/web/-/pipelines/1", "--all-jobs", "--no-llm", *extra
     )
+    return code, out
+
+
+def test_diagnose_all_jobs_emits_the_reports_with_the_runs_cost(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#18 review: several reports get a run total beside them, not just N figures to add."""
+    code, out = _all_jobs(monkeypatch, "--format", "json")
     payload = json.loads(out)
     assert code == EXIT_OK
-    assert isinstance(payload, list) and len(payload) == 2
+    assert payload["schema_version"] == 1
+    assert [r["job"]["name"] for r in payload["reports"]] == ["build", "test"]
+    assert payload["cost"]["estimated_usd"] == 0.0
+
+
+def test_diagnose_all_jobs_ends_with_a_run_total(monkeypatch: pytest.MonkeyPatch) -> None:
+    code, out = _all_jobs(monkeypatch, "--color", "never")
+    assert code == EXIT_OK
+    assert out.rstrip().splitlines()[-1].startswith("Run total   2 jobs · cost $0")
+
+
+def test_diagnose_all_jobs_markdown_ends_with_a_run_total(monkeypatch: pytest.MonkeyPatch) -> None:
+    code, out = _all_jobs(monkeypatch, "--format", "markdown")
+    assert code == EXIT_OK
+    assert out.rstrip().splitlines()[-1].startswith("**Run total** · 2 jobs")
+
+
+def test_a_single_report_has_no_run_total(monkeypatch: pytest.MonkeyPatch) -> None:
+    """One analysis is its own total; the single-report JSON shape is unchanged."""
+    code, out, _err = run(
+        "diagnose", "--from-file", str(TRACES / "npm_eresolve.log"), "--no-llm", "-f", "json"
+    )
+    assert code == EXIT_OK
+    assert "reports" not in json.loads(out)
+    _code, text, _err = run(
+        "diagnose", "--from-file", str(TRACES / "npm_eresolve.log"), "--no-llm", "--color", "never"
+    )
+    assert "Run total" not in text
 
 
 # -- retry history (#17) -----------------------------------------------------

@@ -8,12 +8,14 @@ import pytest
 
 from pipelinemd.cost import (
     PRICES,
+    PRICES_AS_OF,
     Cost,
     call_cost,
     cost_of,
     describe_cost,
     format_usd,
     price_for,
+    run_cost,
 )
 from pipelinemd.diagnose import DEFAULT_MODEL
 from pipelinemd.distill import distill
@@ -182,7 +184,35 @@ def test_the_cost_line_names_the_model_and_the_tokens() -> None:
     cost = cost_of(_report(diagnosis=_diagnosis(input_tokens=5210, output_tokens=1034)))
     assert describe_cost(cost) == (
         "est. cost $0.0519 · claude-opus-5 · 5,210 in / 1,034 out tokens"
+        f" · prices as of {PRICES_AS_OF}"
     )
+
+
+def test_the_cost_line_dates_its_prices() -> None:
+    """A pasted report carries no other clue to how old the estimate is."""
+    cost = Cost(calls=(Usage(model="claude-opus-5", input_tokens=10),))
+    assert describe_cost(cost).endswith(f"prices as of {PRICES_AS_OF}")
+
+
+def test_several_calls_with_none_discarded_say_only_how_many() -> None:
+    call = Usage(model="claude-opus-5", input_tokens=10)
+    assert " · 2 calls · " in describe_cost(Cost(calls=(call, call)))
+
+
+def test_a_run_pools_its_reports_calls() -> None:
+    priced = _report(diagnosis=_diagnosis(input_tokens=1000))
+    discarded = _report(discarded_calls=(Usage(model="claude-opus-5", input_tokens=1000),))
+    run = run_cost([priced, discarded, _report()])
+    assert len(run.calls) == 2
+    assert run.discarded == 1
+    assert run.usd == pytest.approx(0.010)
+
+
+def test_a_run_with_one_unpriced_report_has_no_total() -> None:
+    priced = _report(diagnosis=_diagnosis(input_tokens=1000))
+    unpriced = _report(diagnosis=_diagnosis(model="claude-opus-9", input_tokens=1000))
+    assert cost_of(priced).usd is not None
+    assert run_cost([priced, unpriced]).usd is None
 
 
 @pytest.mark.parametrize(

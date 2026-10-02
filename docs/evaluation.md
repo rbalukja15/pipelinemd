@@ -308,10 +308,10 @@ traces.
 ## Confidence (#18)
 
 Every report shows a confidence, and at low it says **needs human review**.
-The table above is the evidence for that bar. It scores the confidence a
-reader is actually shown — each case is assessed as a report, rules only —
-and, per the rule this document follows, **nothing was re-rated after it
-appeared**.
+The table above is the evidence for that bar where the classification sets
+the level. It scores the confidence a reader is shown when no diagnosis was
+made — each case is assessed as a report, rules only — and, per the rule this
+document follows, **nothing was re-rated after it appeared**.
 
 | level | class right | what is there |
 | --- | --- | --- |
@@ -321,10 +321,12 @@ appeared**.
 
 What it supports, and what it does not:
 
-- **The review bar is where the data puts it.** Low is the only level that is
-  wrong more often than right, and the only one the bar catches. A test holds
-  that premise — low below both other levels — so a corpus change that breaks
-  it fails loudly and the bar gets revisited rather than quietly kept.
+- **For the classification signal, the review bar is where the data puts
+  it.** Low is the only level that is wrong more often than right, and the
+  only one the bar catches. A test holds that premise — low below both other
+  levels — so a corpus change that breaks it fails loudly and the bar gets
+  revisited rather than quietly kept. That is the whole of what the table
+  shows; see below for what it does not.
 - **High is not above medium here.** 91% against 100% looks inverted, but nine
   medium cases cannot separate the two, and every high miss is already a
   recorded finding. It is the number to watch as observed traces arrive; if
@@ -333,11 +335,40 @@ What it supports, and what it does not:
   "right 91% of the time"; on authored traces it cannot. It means the level is
   ordered the way it claims to be, which is the claim an ordinal makes.
 
-The model's half of the confidence — its own rating, citations that do not
-resolve, a class it reads differently — only exists with a diagnosis, so like
-the diagnosis it is not scored here. Unit tests cover each adjustment, and a
-property test checks every combination for the three promises: never above the
-rules or the model, reasons exactly when below high, review exactly at low.
+### What the table cannot see
+
+The table scores one of the assessment's four inputs. The eval builds every
+report without a diagnosis, so the other three — the model's own rating, a
+citation that does not resolve, a class the model reads differently — never
+fire in the population it measures. Each of them only ever lowers the level,
+so the levels scored here are ceilings, and the analyses that land in `low` in
+real use are not the ten that land there in the eval.
+
+How far those three move the corpus, if every case had a diagnosis of the
+given kind:
+
+| every case diagnosed as | needs review |
+| --- | --- |
+| nothing — rules only, what the table measures | 10/62 |
+| high, clean | 10/62 |
+| medium, clean | 10/62 |
+| high, one invented citation | 19/62 |
+| high, a different class from the rules | 19/62 |
+| medium, one invented citation | 62/62 |
+| high, an invented citation *and* a different class | 62/62 |
+
+One sign of trouble never sends a high analysis to review; two always do,
+including the 43 cases the table scores at 91%. That is by design, but it is
+**a judgement, not a measurement**: nothing here shows that an analysis
+demoted to low by the model's side is wrong more often than right. Those
+demotions are reasoned — a diagnosis that invents a line, or contradicts the
+rules, is worth a person's time — and tested, not calibrated. Scoring them
+needs the diagnosis scored, which the eval leaves out on purpose (see the top
+of this document).
+
+Unit tests cover each adjustment, and a property test checks every
+combination for the three promises: never above the rules or the model,
+reasons exactly when below high, review exactly at low.
 
 ## Reading the number honestly
 
