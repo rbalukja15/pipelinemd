@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from .models import Usage
+
 
 class PipelinemdError(Exception):
     """Base class for every error this tool raises deliberately."""
@@ -28,4 +33,13 @@ class NotFoundError(GitLabError):
 
 
 class DiagnosisError(PipelinemdError):
-    """The LLM diagnosis layer could not produce a result."""
+    """The LLM diagnosis layer could not produce a result.
+
+    `usage` is set when the model answered and the answer was then refused -
+    the call was billed even though no diagnosis came of it. It is None when
+    no answer arrived at all.
+    """
+
+    def __init__(self, message: str, *, usage: Usage | None = None) -> None:
+        super().__init__(message)
+        self.usage = usage

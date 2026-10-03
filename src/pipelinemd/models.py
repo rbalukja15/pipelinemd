@@ -288,6 +288,22 @@ class Citation:
 
 
 @dataclass(frozen=True, slots=True)
+class Usage:
+    """The tokens one model call was billed for, as the API reported them.
+
+    Field names are the API's own, so nothing is lost in translation. On the
+    Messages API, `input_tokens` excludes tokens read from or written to the
+    prompt cache - the four counts are billed separately and do not overlap.
+    """
+
+    model: str
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cache_creation_input_tokens: int = 0
+    cache_read_input_tokens: int = 0
+
+
+@dataclass(frozen=True, slots=True)
 class Diagnosis:
     summary: str
     root_cause: str
@@ -305,6 +321,19 @@ class Diagnosis:
     model: str = ""
     input_tokens: int = 0
     output_tokens: int = 0
+    cache_creation_input_tokens: int = 0
+    cache_read_input_tokens: int = 0
+
+    @property
+    def usage(self) -> Usage:
+        """What the call that produced this diagnosis was billed for."""
+        return Usage(
+            model=self.model,
+            input_tokens=self.input_tokens,
+            output_tokens=self.output_tokens,
+            cache_creation_input_tokens=self.cache_creation_input_tokens,
+            cache_read_input_tokens=self.cache_read_input_tokens,
+        )
 
     @property
     def fully_grounded(self) -> bool:
@@ -400,6 +429,11 @@ class Report:
     diagnosis: Diagnosis | None = None
     #: Other attempts of this job in the same pipeline, when they were fetched.
     retry: RetryHistory | None = None
+    #: Model calls that were billed but produced no diagnosis: a refusal, a
+    #: reply that was not JSON, or a diagnosis rejected for citing nothing
+    #: real. The call that produced `diagnosis` is not repeated here - it is
+    #: on the diagnosis itself - so the analysis's cost reads both.
+    discarded_calls: tuple[Usage, ...] = ()
 
     @property
     def top_hit(self) -> RuleHit | None:

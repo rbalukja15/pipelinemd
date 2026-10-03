@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from ..assessment import Assessment, assess
+from ..cost import cost_of, describe_cost, run_cost
 from ..models import Classification, Confidence, EvidenceLine, Report, RuleHit
 from ..taxonomy import classify, model_disagreement
 from .evidence import gap_before, select_display_lines
@@ -48,7 +50,7 @@ def _clip(text: str, limit: int) -> str:
     return text[: limit - 1] + "…"
 
 
-def _header(report: Report, style: Style) -> list[str]:
+def _header(report: Report, style: Style, width: int) -> list[str]:
     job = report.job
     distilled = report.distilled
     lines = [style.bold(f"pipelinemd  {job.label}")]
@@ -71,6 +73,8 @@ def _header(report: Report, style: Style) -> list[str]:
     if distilled.failure_reason:
         lines.append("  " + style.red(distilled.failure_reason))
     lines.append(_class_line(classify(report), style))
+    lines.extend(_assessment_lines(assess(report), style, width))
+    lines.append(style.dim("  " + describe_cost(cost_of(report))))
     return lines
 
 
@@ -86,6 +90,15 @@ def _class_line(classification: Classification, style: Style) -> str:
         + style.bold(class_label(classification))
         + style.dim(f"  ·  {classification.confidence}  ·  {classification.basis}")
     )
+
+
+def _assessment_lines(assessment: Assessment, style: Style, width: int) -> list[str]:
+    why = "; ".join(assessment.reasons)
+    if assessment.needs_review:
+        text = f"⚠ needs human review — {assessment.confidence} confidence: {why}"
+        return [style.yellow(line) for line in _wrap(text, width, indent="  ")]
+    text = f"confidence {assessment.confidence}" + (f": {why}" if why else "")
+    return [style.dim(line) for line in _wrap(text, width, indent="  ")]
 
 
 def _diagnosis(report: Report, style: Style, width: int) -> list[str]:
@@ -226,10 +239,19 @@ def render_terminal(
 ) -> str:
     """The default report: header, diagnosis, rules, evidence."""
     lines: list[str] = []
-    lines += _header(report, style)
+    lines += _header(report, style, width)
     lines += _diagnosis(report, style, width)
     lines += _fixes_from_rules(report, style, width)
     lines += _rules(report.hits, style, rule_limit)
     lines += _evidence(report, style, evidence_limit)
     lines.append("")
     return "\n".join(lines)
+
+
+def render_run_total(reports: list[Report], style: Style) -> str:
+    """The cost of a run of several analyses, under the last of them."""
+    return (
+        style.heading("Run total")
+        + style.dim(f"   {len(reports)} jobs · {describe_cost(run_cost(reports))}")
+        + "\n"
+    )

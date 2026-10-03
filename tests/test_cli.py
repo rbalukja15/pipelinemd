@@ -291,23 +291,55 @@ def test_diagnose_mentions_the_other_failed_jobs(monkeypatch: pytest.MonkeyPatch
     assert "--all-jobs" in err and "test" in err
 
 
-def test_diagnose_all_jobs_emits_a_json_list(monkeypatch: pytest.MonkeyPatch) -> None:
-    jobs = [
-        {"id": 1, "name": "build", "stage": "build", "status": "failed"},
-        {"id": 2, "name": "test", "stage": "test", "status": "failed"},
-    ]
-    monkeypatch.setattr(cli, "GitLabClient", lambda *a, **k: _FakeClient(jobs=jobs))
+_TWO_FAILED = [
+    {"id": 1, "name": "build", "stage": "build", "status": "failed"},
+    {"id": 2, "name": "test", "stage": "test", "status": "failed"},
+]
+
+
+def _all_jobs(monkeypatch: pytest.MonkeyPatch, *extra: str) -> tuple[int, str]:
+    monkeypatch.setattr(cli, "GitLabClient", lambda *a, **k: _FakeClient(jobs=_TWO_FAILED))
     code, out, _err = run(
-        "diagnose",
-        "https://gitlab.com/acme/web/-/pipelines/1",
-        "--all-jobs",
-        "--no-llm",
-        "--format",
-        "json",
+        "diagnose", "https://gitlab.com/acme/web/-/pipelines/1", "--all-jobs", "--no-llm", *extra
     )
+    return code, out
+
+
+def test_diagnose_all_jobs_emits_the_reports_with_the_runs_cost(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#18 review: several reports get a run total beside them, not just N figures to add."""
+    code, out = _all_jobs(monkeypatch, "--format", "json")
     payload = json.loads(out)
     assert code == EXIT_OK
-    assert isinstance(payload, list) and len(payload) == 2
+    assert payload["schema_version"] == 1
+    assert [r["job"]["name"] for r in payload["reports"]] == ["build", "test"]
+    assert payload["cost"]["estimated_usd"] == 0.0
+
+
+def test_diagnose_all_jobs_ends_with_a_run_total(monkeypatch: pytest.MonkeyPatch) -> None:
+    code, out = _all_jobs(monkeypatch, "--color", "never")
+    assert code == EXIT_OK
+    assert out.rstrip().splitlines()[-1].startswith("Run total   2 jobs · cost $0")
+
+
+def test_diagnose_all_jobs_markdown_ends_with_a_run_total(monkeypatch: pytest.MonkeyPatch) -> None:
+    code, out = _all_jobs(monkeypatch, "--format", "markdown")
+    assert code == EXIT_OK
+    assert out.rstrip().splitlines()[-1].startswith("**Run total** · 2 jobs")
+
+
+def test_a_single_report_has_no_run_total(monkeypatch: pytest.MonkeyPatch) -> None:
+    """One analysis is its own total; the single-report JSON shape is unchanged."""
+    code, out, _err = run(
+        "diagnose", "--from-file", str(TRACES / "npm_eresolve.log"), "--no-llm", "-f", "json"
+    )
+    assert code == EXIT_OK
+    assert "reports" not in json.loads(out)
+    _code, text, _err = run(
+        "diagnose", "--from-file", str(TRACES / "npm_eresolve.log"), "--no-llm", "--color", "never"
+    )
+    assert "Run total" not in text
 
 
 # -- retry history (#17) -----------------------------------------------------
@@ -422,6 +454,54 @@ def test_a_failed_diagnosis_is_not_fatal(monkeypatch: pytest.MonkeyPatch) -> Non
     assert "npm.eresolve" in out
     assert "no credentials" in err
     assert "Rules were still applied" in err
+
+
+def test_a_diagnosis_turned_down_after_billing_is_still_costed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#18: the analysis cost what the call cost, even with no diagnosis to show."""
+    from pipelinemd.errors import DiagnosisError
+    from pipelinemd.models import Usage
+
+    spent = Usage(model="claude-opus-5", input_tokens=1000, output_tokens=100)
+    monkeypatch.setattr(cli, "llm_available", lambda: True)
+    monkeypatch.setattr(
+        cli,
+        "run_diagnosis",
+        lambda *a, **k: (_ for _ in ()).throw(DiagnosisError("ungrounded", usage=spent)),
+    )
+    code, out, _err = run("diagnose", "--from-file", str(TRACES / "npm_eresolve.log"), "-f", "json")
+    assert code == EXIT_OK
+    payload = json.loads(out)
+    assert payload["diagnosis"] is None
+    assert payload["cost"]["discarded_calls"] == 1
+    assert payload["cost"]["estimated_usd"] == pytest.approx(0.005 + 0.0025)
+
+
+def test_a_call_that_never_reached_the_model_costs_nothing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pipelinemd.errors import DiagnosisError
+
+    monkeypatch.setattr(cli, "llm_available", lambda: True)
+    monkeypatch.setattr(
+        cli,
+        "run_diagnosis",
+        lambda *a, **k: (_ for _ in ()).throw(DiagnosisError("no credentials")),
+    )
+    code, out, _err = run("diagnose", "--from-file", str(TRACES / "npm_eresolve.log"), "-f", "json")
+    assert code == EXIT_OK
+    assert json.loads(out)["cost"]["calls"] == []
+
+
+def test_every_report_shows_a_confidence_and_a_cost() -> None:
+    """#18's acceptance criterion, on the default output."""
+    code, out, _err = run(
+        "diagnose", "--from-file", str(TRACES / "npm_eresolve.log"), "--no-llm", "--color", "never"
+    )
+    assert code == EXIT_OK
+    assert "confidence high" in out
+    assert "cost $0" in out
 
 
 def test_missing_anthropic_package_is_explained(monkeypatch: pytest.MonkeyPatch) -> None:

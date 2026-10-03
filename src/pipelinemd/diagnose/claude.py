@@ -11,7 +11,7 @@ import json
 from typing import TYPE_CHECKING, Any
 
 from ..errors import DiagnosisError
-from ..models import Diagnosis, DistilledLog, Fix, JobRef, RuleHit
+from ..models import Diagnosis, DistilledLog, Fix, JobRef, RuleHit, Usage
 from ..taxonomy import coerce_failure_class
 from .citations import coerce_line_numbers, resolve_citations
 from .prompt import (
@@ -52,6 +52,21 @@ def _client(api_key: str | None) -> Anthropic:
     return anthropic.Anthropic(api_key=api_key) if api_key else anthropic.Anthropic()
 
 
+def _usage(model: str, usage: Any) -> Usage:
+    """The billed token counts, read defensively: a missing count is zero."""
+
+    def count(name: str) -> int:
+        return int(getattr(usage, name, 0) or 0)
+
+    return Usage(
+        model=model,
+        input_tokens=count("input_tokens"),
+        output_tokens=count("output_tokens"),
+        cache_creation_input_tokens=count("cache_creation_input_tokens"),
+        cache_read_input_tokens=count("cache_read_input_tokens"),
+    )
+
+
 def _extract_json(content: list[Any]) -> dict[str, Any]:
     """Pull the JSON object out of the response.
 
@@ -73,9 +88,7 @@ def _extract_json(content: list[Any]) -> dict[str, Any]:
     raise DiagnosisError("Model response contained no text block.")
 
 
-def _to_diagnosis(
-    payload: dict[str, Any], model: str, usage: Any, distilled: DistilledLog
-) -> Diagnosis:
+def _to_diagnosis(payload: dict[str, Any], usage: Usage, distilled: DistilledLog) -> Diagnosis:
     """Build a Diagnosis, refusing one that cites nothing real.
 
     The citation check is the whole point of the discipline: a confident
@@ -91,7 +104,8 @@ def _to_diagnosis(
         raise DiagnosisError(
             f"Diagnosis rejected: it cited {cited}, and none of that exists in "
             "the evidence it was given. A diagnosis that cannot point at a real "
-            "line is not grounded in this job's log."
+            "line is not grounded in this job's log.",
+            usage=usage,
         )
 
     fixes = []
@@ -115,9 +129,11 @@ def _to_diagnosis(
         fixes=tuple(fixes),
         citations=citations,
         unresolved_citations=unresolved,
-        model=model,
-        input_tokens=int(getattr(usage, "input_tokens", 0) or 0),
-        output_tokens=int(getattr(usage, "output_tokens", 0) or 0),
+        model=usage.model,
+        input_tokens=usage.input_tokens,
+        output_tokens=usage.output_tokens,
+        cache_creation_input_tokens=usage.cache_creation_input_tokens,
+        cache_read_input_tokens=usage.cache_read_input_tokens,
     )
 
 
@@ -158,13 +174,15 @@ def diagnose(
     except Exception as exc:
         raise DiagnosisError(f"Claude request failed: {exc}") from exc
 
+    # From here on the call has been billed, so every way of turning the
+    # answer down carries its usage: an analysis that threw its answer away
+    # still cost what it cost.
+    usage = _usage(model, getattr(response, "usage", None))
     if getattr(response, "stop_reason", None) == "refusal":
-        raise DiagnosisError("Claude declined to analyse this trace.")
+        raise DiagnosisError("Claude declined to analyse this trace.", usage=usage)
 
-    payload = _extract_json(list(response.content))
-    return _to_diagnosis(
-        payload,
-        model=model,
-        usage=getattr(response, "usage", None),
-        distilled=distilled,
-    )
+    try:
+        payload = _extract_json(list(response.content))
+    except DiagnosisError as exc:
+        raise DiagnosisError(str(exc), usage=usage) from exc
+    return _to_diagnosis(payload, usage=usage, distilled=distilled)
