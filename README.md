@@ -1,7 +1,7 @@
 # pipelinemd
 
 [![CI](https://github.com/rbalukja15/pipelinemd/actions/workflows/ci.yml/badge.svg)](https://github.com/rbalukja15/pipelinemd/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/rbalukja15/pipelinemd/blob/main/LICENSE)
 
 **GitLab CI/CD failure doctor** — takes a failed pipeline, works out what
 actually broke, and tells you how to fix it.
@@ -74,6 +74,30 @@ pip install 'pipelinemd[llm]'       # adds the Claude diagnosis layer
 
 Requires Python 3.11+.
 
+Or skip Python altogether. The image has the `[llm]` extra installed, runs as
+an unprivileged user, and is built for amd64 and arm64:
+
+```bash
+docker run --rm ghcr.io/rbalukja15/pipelinemd:0.1 --version
+docker run --rm -i ghcr.io/rbalukja15/pipelinemd:0.1 distill - < build.log
+```
+
+The image runs as uid 10001, so to save a report redirect stdout rather than
+passing `-o` into a mounted directory, which that user may not be allowed to
+write to:
+
+```bash
+docker run --rm -i ghcr.io/rbalukja15/pipelinemd:0.1 distill - < build.log > report.txt
+```
+
+On rootful Linux Docker, `--user "$(id -u):$(id -g)"` also lets `-o` write into
+a mount; rootless Docker and Podman map that uid elsewhere, so redirect there.
+
+Tags follow the package: `0.1.0` exactly, `0.1` for the latest patch release,
+and `latest`. The image and the PyPI package are published by one workflow
+from one tag, so a version means the same thing in both
+([docs/releasing.md](https://github.com/rbalukja15/pipelinemd/blob/main/docs/releasing.md)).
+
 ## Use
 
 ### Diagnose a failed job or pipeline
@@ -107,9 +131,9 @@ pasting it anywhere.
 make eval
 ```
 
-Runs the distiller and rule engine over 62 labelled traces in [`corpus/`](corpus/README.md)
+Runs the distiller and rule engine over 62 labelled traces in [`corpus/`](https://github.com/rbalukja15/pipelinemd/blob/main/corpus/README.md)
 and reports rule@1, evidence hit rate and exit-code accuracy per failure class.
-Offline and deterministic. Results and their caveats: [docs/evaluation.md](docs/evaluation.md).
+Offline and deterministic. Results and their caveats: [docs/evaluation.md](https://github.com/rbalukja15/pipelinemd/blob/main/docs/evaluation.md).
 
 `make gate` is the same run with CI's thresholds, and runs on every push — a
 catalog regression fails the build rather than being noticed later.
@@ -130,6 +154,30 @@ Run with no target at all and it diagnoses the pipeline it is running in:
 ```yaml
 diagnose:
   stage: .post
+  image:
+    name: ghcr.io/rbalukja15/pipelinemd:0.1
+    entrypoint: [""]
+  when: on_failure
+  script:
+    - pipelinemd diagnose --format markdown -o diagnosis.md
+  artifacts:
+    when: always
+    paths: [diagnosis.md]
+```
+
+Nothing is installed when the job runs, so a failure is diagnosed even while
+PyPI is slow or unreachable. The `entrypoint: [""]` matters: the image's
+entrypoint is the CLI, and GitLab needs a shell to run `script:`.
+
+`CI_JOB_TOKEN` and `CI_PIPELINE_ID` are picked up automatically. Set
+`ANTHROPIC_API_KEY` as a masked CI variable to enable the diagnosis layer.
+
+Any image with Python 3.11+ works too, at the cost of an install on every
+failure:
+
+```yaml
+diagnose:
+  stage: .post
   image: python:3.12-slim
   when: on_failure
   script:
@@ -140,10 +188,7 @@ diagnose:
     paths: [diagnosis.md]
 ```
 
-`CI_JOB_TOKEN` and `CI_PIPELINE_ID` are picked up automatically. Set
-`ANTHROPIC_API_KEY` as a masked CI variable to enable the diagnosis layer.
-
-A ready-made job is in [`examples/gitlab-ci-diagnose.yml`](examples/gitlab-ci-diagnose.yml).
+A ready-made job is in [`examples/gitlab-ci-diagnose.yml`](https://github.com/rbalukja15/pipelinemd/blob/main/examples/gitlab-ci-diagnose.yml).
 
 ## Output formats
 
@@ -199,7 +244,8 @@ pipelines accordingly.
 A failed Claude call is **not** fatal: pipelinemd warns on stderr and reports
 the deterministic findings anyway.
 
-For how the pieces fit together, see [docs/architecture.md](docs/architecture.md).
+For how the pieces fit together, see [docs/architecture.md](https://github.com/rbalukja15/pipelinemd/blob/main/docs/architecture.md);
+for how a version reaches PyPI and the image, [docs/releasing.md](https://github.com/rbalukja15/pipelinemd/blob/main/docs/releasing.md).
 
 ## Design notes
 
@@ -238,4 +284,4 @@ often transient is flaky only when retry history says so.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](https://github.com/rbalukja15/pipelinemd/blob/main/LICENSE).

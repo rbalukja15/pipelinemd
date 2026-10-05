@@ -12,7 +12,8 @@ Closes #
 
 ```bash
 make install
-make check    # lint + typecheck + test + eval gate, the targets CI runs
+make check               # lint + typecheck + test + eval gate, CI's test job
+make image image-smoke   # CI's image job; needs docker, matters if the Dockerfile or packaging changed
 ```
 
 ## Checklist

@@ -263,6 +263,20 @@ renderer is forty lines.
 `anthropic` is the one optional extra, imported lazily so that
 `import pipelinemd` never requires it.
 
+## One version, two ways to install it
+
+The same reasoning is why there is an image. A diagnose job that runs
+`pip install` on every failure depends on PyPI at exactly the moment something
+is already broken, so `ghcr.io/rbalukja15/pipelinemd` ships the CLI with the
+`[llm]` extra already installed, and a GitLab job names it in `image:`.
+
+The image is built from the tagged source rather than installed from PyPI, so
+CI can build and smoke-test it on every push, long before the version exists
+anywhere. Both are published by one workflow from one tag, and the version is
+written in one place, `__version__`, which hatch reads into the package
+metadata and the release workflow checks the tag against. How a release runs,
+and why in that order: [releasing](releasing.md).
+
 ## Trust boundaries
 
 Job traces are untrusted input. They can be enormous, contain invalid UTF-8,

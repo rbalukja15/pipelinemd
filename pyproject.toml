@@ -79,7 +79,7 @@ ignore = ["E501", "RUF001", "RUF002", "RUF003"]
 [tool.mypy]
 python_version = "3.11"
 strict = true
-files = ["src/pipelinemd"]
+files = ["src/pipelinemd", "scripts"]
 
 # `anthropic` is an optional extra: the core must type-check without it
 # installed, and gets checked properly when it is.
