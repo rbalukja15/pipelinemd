@@ -1,29 +1,94 @@
 name: Release
 
-# A version tag is the only way in. Branch pushes and pull requests are CI's
-# business; nothing here should run without a person deciding to release.
+# Merging a version bump to main is the only way in: the person deciding to
+# release is the one who merged it. Pushes elsewhere and pull requests are CI's
+# business. The paths are the files a release is made of. Most merges add a
+# CHANGELOG.md entry, so most start a run that detect ends in seconds; the
+# paths only keep out merges that touch none of them. The manual trigger
+# retries a release whose fix touched none of them. Nothing triggers on tags,
+# so there is one way a release starts.
 on:
   push:
-    tags: ["v*.*.*"]
+    branches: [main]
+    paths:
+      - src/pipelinemd/__init__.py
+      - CHANGELOG.md
+      - .github/workflows/release.yml
+  workflow_dispatch:
 
 # Every job asks for exactly what it needs below, so nothing inherits a write
 # token by default.
 permissions: {}
 
-# Two tags pushed close together must not interleave their uploads, and a
-# release half-way through PyPI must not be cancelled by the next one.
+# Two merges close together must not interleave their uploads, and a release
+# half-way through PyPI must not be cancelled by the next one. Queued behind
+# it, the next run finds any tag this one pushed and skips that version. Only
+# one run waits: a newer push replaces it and releases from its own commit,
+# which verify refuses if that commit has changes the notes leave out.
 concurrency:
   group: release
   cancel-in-progress: false
 
 jobs:
-  # The checks CI's test job runs, again, on the exact commit being tagged,
+  # Most pushes to main are not releases. This one is if __version__ is a final
+  # X.Y.Z and its tag does not exist yet; the tag is pushed once a release has
+  # passed verify and dist, so an existing tag means that version is done or
+  # under way, and only "Re-run failed jobs" on its own run should touch it.
+  # "Re-run all jobs" would land here, find the tag and end green with the
+  # release unfinished, so a re-run that finds the tag fails instead.
+  detect:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      release: ${{ steps.decide.outputs.release }}
+      tag: ${{ steps.decide.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Every way out says why in the job summary, so a skipped run explains
+      # itself on the Actions page. The script needs nothing installed.
+      - id: decide
+        run: |
+          skip() {
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            printf '### No release\n\n%s\n' "$1" >> "$GITHUB_STEP_SUMMARY"
+          }
+          if [ "$GITHUB_REF" != refs/heads/main ]; then
+            skip "Releases are made from main only, not $GITHUB_REF."
+            exit 0
+          fi
+          if ! tag=$(python3 scripts/release_notes.py --tag 2> "$RUNNER_TEMP/why"); then
+            skip "$(cat "$RUNNER_TEMP/why")"
+            exit 0
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          # 2 is "no such ref"; anything else but 0 is git failing, which
+          # must not be mistaken for an unreleased version.
+          status=0
+          git ls-remote --exit-code origin "refs/tags/$tag" > /dev/null || status=$?
+          case $status in
+            0)
+              if [ "$GITHUB_RUN_ATTEMPT" -gt 1 ]; then
+                echo "::error::$tag already exists, and this is a re-run. If this run pushed it, a job after tag failed and only \"Re-run failed jobs\" resumes it; see docs/releasing.md. Otherwise there is nothing to release."
+                exit 1
+              fi
+              skip "$tag already exists: that version has been released, or its release has started."
+              ;;
+            2) echo "release=true" >> "$GITHUB_OUTPUT" ;;
+            *) exit "$status" ;;
+          esac
+
+  # The checks CI's test job runs, again, on the exact commit to be tagged,
   # plus the one check CI cannot make: that the tag, __version__ and
-  # CHANGELOG.md agree, and that the version is a final release. The image
-  # smoke test is not repeated: CI's image job ran it when the commit was
-  # pushed. PyPI never accepts the same version twice, so this has to be
-  # settled before anything is uploaded.
+  # CHANGELOG.md agree, that the version is a final release, and that nothing
+  # merged since is left under [Unreleased]. The image smoke test is not
+  # repeated: CI ran it on the pull request (CI on main runs alongside this
+  # workflow, not before it). PyPI never accepts the same version twice, so
+  # this has to be settled before anything is uploaded.
   verify:
+    needs: detect
+    if: needs.detect.outputs.release == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -35,10 +100,10 @@ jobs:
           python-version: "3.12"
 
       # The tag reaches the script through the environment, never by being
-      # pasted into the script: a tag name is text whoever pushed it chose.
+      # pasted into the script: it is made from text in a pushed commit.
       - name: Tag matches the version and the changelog
         env:
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ needs.detect.outputs.tag }}
         run: make release-notes PYTHON=python
 
       - name: Install
@@ -52,6 +117,8 @@ jobs:
   # Built once, here, and uploaded as-is: the files on PyPI and on the GitHub
   # Release are byte-for-byte the ones twine checked.
   dist:
+    needs: detect
+    if: needs.detect.outputs.release == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -71,7 +138,7 @@ jobs:
       # carry the tag's version rather than trusting that they do.
       - name: Built version matches the tag
         env:
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ needs.detect.outputs.tag }}
         run: |
           test -f "dist/pipelinemd-${TAG#v}-py3-none-any.whl"
           test -f "dist/pipelinemd-${TAG#v}.tar.gz"
@@ -82,12 +149,53 @@ jobs:
           path: dist/
           if-no-files-found: error
 
+  # The tag is pushed before anything is uploaded, as it was when a person
+  # pushed it: from here on it marks this version's release as started, so
+  # later pushes to main skip it and a failure is recovered by re-running this
+  # run's failed jobs. A re-run finds its own tag and goes on; the same tag on
+  # another commit stops the release. Annotated, like the tags pushed by hand
+  # before it, so it records who made it and when. A tag pushed with
+  # GITHUB_TOKEN triggers no other workflow, which is fine: nothing triggers on
+  # tags.
+  tag:
+    needs: [detect, verify, dist]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tag this commit
+        env:
+          TAG: ${{ needs.detect.outputs.tag }}
+        run: |
+          status=0
+          git ls-remote --exit-code origin "refs/tags/$TAG" > /dev/null || status=$?
+          case $status in
+            2)
+              git -c user.name="github-actions[bot]" \
+                -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+                tag -a "$TAG" -m "$TAG" "$GITHUB_SHA"
+              git push origin "refs/tags/$TAG"
+              ;;
+            0)
+              git fetch --depth=1 --no-tags origin "refs/tags/$TAG:refs/tags/$TAG"
+              tagged=$(git rev-parse "refs/tags/$TAG^{commit}")
+              if [ "$tagged" != "$GITHUB_SHA" ]; then
+                echo "::error::$TAG already exists on $tagged, not on $GITHUB_SHA"
+                exit 1
+              fi
+              echo "$TAG is already on this commit"
+              ;;
+            *) exit "$status" ;;
+          esac
+
   # Trusted publishing: PyPI exchanges this job's OIDC token for a short-lived
   # upload credential, so there is no API token to store, leak or rotate. The
   # pypi environment is what the trusted publisher is bound to, and where a
   # required reviewer can be added to gate every release by hand.
   pypi:
-    needs: [verify, dist]
+    needs: [dist, tag]
     runs-on: ubuntu-latest
     environment:
       name: pypi
@@ -106,7 +214,7 @@ jobs:
   # cannot. Waiting means a failed upload leaves nothing published under that
   # version, rather than an image for a package that does not exist.
   image:
-    needs: [verify, pypi]
+    needs: [detect, pypi]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -129,15 +237,19 @@ jobs:
       # v1.4.2 becomes 1.4.2, 1.4 and latest. The example GitLab job pins the
       # minor tag, so it picks up patch releases and never a breaking one.
       # Verify has already refused anything that is not a final X.Y.Z release.
+      # The run is on main, not on a tag, so the version is given rather than
+      # read from the ref, and latest is stated rather than inferred from it.
+      # The first semver tag, 1.4.2, is what meta.outputs.version reports.
       - id: meta
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/rbalukja15/pipelinemd
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{version}},value=${{ needs.detect.outputs.tag }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.detect.outputs.tag }}
+            type=raw,value=latest
           flavor: |
-            latest=auto
+            latest=false
 
       # No build cache: each version is built exactly once, so a cache would
       # only ever be written, never read.
@@ -153,7 +265,7 @@ jobs:
 
   # Last, so a release page never announces something that failed to publish.
   github-release:
-    needs: [pypi, image]
+    needs: [detect, pypi, image]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -170,7 +282,7 @@ jobs:
       - name: Create the GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ needs.detect.outputs.tag }}
         run: |
           make release-notes > "$RUNNER_TEMP/notes.md"
           gh release create "$TAG" dist/* \

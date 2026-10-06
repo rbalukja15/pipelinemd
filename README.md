@@ -95,7 +95,7 @@ a mount; rootless Docker and Podman map that uid elsewhere, so redirect there.
 
 Tags follow the package: `0.1.0` exactly, `0.1` for the latest patch release,
 and `latest`. The image and the PyPI package are published by one workflow
-from one tag, so a version means the same thing in both
+from one commit, so a version means the same thing in both
 ([docs/releasing.md](https://github.com/rbalukja15/pipelinemd/blob/main/docs/releasing.md)).
 
 ## Use

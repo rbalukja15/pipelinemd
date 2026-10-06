@@ -1,6 +1,7 @@
 """Check a release tag against the code, and print that version's changelog.
 
     python scripts/release_notes.py v0.2.0
+    python scripts/release_notes.py --tag
 
 Exits non-zero, saying why, unless all of these hold:
 
@@ -12,12 +13,18 @@ Exits non-zero, saying why, unless all of these hold:
   version at all, so the image job would fail only after PyPI had accepted the
   upload. Pre-, post- and dev releases are refused here instead;
 * CHANGELOG.md has a section for that version;
-* the section is dated, so the template's ``YYYY-MM-DD`` cannot be published.
+* the section is dated, so the template's ``YYYY-MM-DD`` cannot be published;
+* ``[Unreleased]`` is empty. Anything under it is a change that would ship in
+  this version without being in its notes, and be listed again as new next time.
 
 On success the section's body goes to stdout, which is what the GitHub
 Release's notes are made from. The release workflow runs it before anything
-is built, so a mismatch stops a release while it can still be fixed by
-re-tagging, rather than after PyPI has accepted a version it will never let go.
+is built or tagged, so a mismatch stops a release while it can still be fixed
+on main, rather than after PyPI has accepted a version it will never let go.
+
+``--tag`` prints the tag the current ``__version__`` would be released as, or
+fails, saying why, if it is not a final release. The release workflow uses it
+to decide whether a push to main is a release at all.
 
 Standard library only: it runs on a bare runner before anything is installed.
 """
@@ -66,15 +73,26 @@ def changelog_section(changelog: str, version: str) -> tuple[str | None, str] | 
     return None
 
 
+def _require_final(version: str) -> None:
+    if not _FINAL.fullmatch(version):
+        raise ValueError(
+            f"{version} is not a final X.Y.Z release; pre-, post- and dev releases are not published"
+        )
+
+
+def release_tag(source: str) -> str:
+    """Return the tag ``source``'s version is released as, or raise ValueError if it is not final."""
+    version = package_version(source)
+    _require_final(version)
+    return f"v{version}"
+
+
 def check(tag: str, source: str, changelog: str) -> str:
     """Return the release notes for ``tag``, or raise ValueError saying what is wrong."""
     version = package_version(source)
     if tag.removeprefix("v") != version:
         raise ValueError(f"tag {tag} does not match __version__ {version}")
-    if not _FINAL.fullmatch(version):
-        raise ValueError(
-            f"{version} is not a final X.Y.Z release; pre-, post- and dev releases are not published"
-        )
+    _require_final(version)
     section = changelog_section(changelog, version)
     if section is None:
         raise ValueError(f"CHANGELOG.md has no section for {version}")
@@ -83,23 +101,31 @@ def check(tag: str, source: str, changelog: str) -> str:
         raise ValueError(f"CHANGELOG.md section for {version} is not dated (YYYY-MM-DD)")
     if not body:
         raise ValueError(f"CHANGELOG.md section for {version} is empty")
+    unreleased = changelog_section(changelog, "Unreleased")
+    if unreleased is not None and unreleased[1]:
+        raise ValueError(
+            f"CHANGELOG.md has changes under [Unreleased] that {version}'s notes leave out"
+        )
     return body
 
 
 def main(argv: list[str]) -> int:
     if len(argv) != 1:
-        print("usage: release_notes.py vX.Y.Z", file=sys.stderr)
+        print("usage: release_notes.py vX.Y.Z | --tag", file=sys.stderr)
         return 2
     try:
-        notes = check(
-            argv[0],
-            VERSION_FILE.read_text(encoding="utf-8"),
-            CHANGELOG.read_text(encoding="utf-8"),
-        )
+        if argv[0] == "--tag":
+            output = release_tag(VERSION_FILE.read_text(encoding="utf-8"))
+        else:
+            output = check(
+                argv[0],
+                VERSION_FILE.read_text(encoding="utf-8"),
+                CHANGELOG.read_text(encoding="utf-8"),
+            )
     except ValueError as error:
         print(f"release check failed: {error}", file=sys.stderr)
         return 1
-    print(notes)
+    print(output)
     return 0
 
 
