@@ -20,9 +20,19 @@ from .redact import redact_lines
 # already been stripped by the time we match, so only the \r remains.
 _SECTION = re.compile(r"^section_(start|end):(\d{1,12}):([A-Za-z0-9_.\-]+)(\[[^\]]*\])?\r?")
 
-# Runner "timestamps" feature: RFC3339 followed by a short stream descriptor.
+# Runner "timestamps" feature: an RFC3339 UTC time and one space, then a
+# four-byte stream descriptor: a stream number in two hex digits, O or E for
+# stdout or stderr, and a space for a full line or a + for a continuation.
+# The + takes the space's place, so the text follows it directly
+# ("...Z 00O $ make", "...Z 00O+section_end:..."); this is the same header
+# GitLab itself slices off. Continuations are not rejoined onto the line
+# before them here, so a progress bar split across them stays several lines.
+# The descriptor is matched exactly rather than as any short word: logs from
+# other systems (GitHub Actions) carry the time alone, and a looser pattern
+# ate their first word ("Post", "Run", "with"). Exactly one separator space
+# is taken, because whatever follows it is the line's own indentation.
 _TIMESTAMP = re.compile(
-    r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\s+(?:[0-9A-Za-z]{2,4}\s)?"
+    r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z(?: |$)(?:[0-9a-f]{2}[OE][+ ])?"
 )
 
 _RUNNER = re.compile(r"^Running with gitlab-runner\s+(.+?)\s*$")
@@ -76,6 +86,9 @@ def _clip_raw(raw: str, limit: int = MAX_RAW_BYTES) -> tuple[str, bool]:
 def clean_trace(raw: str) -> CleanedTrace:
     """Parse a raw trace into numbered lines plus the metadata it carries."""
     raw_bytes = len(raw.encode("utf-8", errors="replace"))
+    # GitHub's job logs start with a byte order mark, which would otherwise
+    # sit in front of the first timestamp and keep it from being stripped.
+    raw = raw.removeprefix("\ufeff")
     clipped, _was_clipped = _clip_raw(raw)
     raw_line_list = clipped.replace("\r\n", "\n").split("\n")
 
