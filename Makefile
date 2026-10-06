@@ -34,27 +34,40 @@ MIN_CLASS_ACCURACY ?= 0.78
 # answer where it used to stay silent is a regression worth failing over.
 MAX_GAP_FALSE_POSITIVES ?= 0
 
-.PHONY: help install lint format typecheck test eval gate check clean
+# The image `make image` builds and `make image-smoke` runs. PACKAGE_VERSION
+# is read from the same line hatch stamps the wheel with, so the smoke test
+# checks the image reports the version the package claims. Not plain VERSION:
+# that name is common enough in a CI environment to be picked up by accident.
+IMAGE ?= pipelinemd:dev
+PACKAGE_VERSION ?= $(shell sed -n 's/^__version__ = "\(.*\)"$$/\1/p' src/pipelinemd/__init__.py)
+SMOKE_TRACE ?= corpus/traces/runner-oom-killed.log
+
+.PHONY: help install lint format typecheck test eval gate check dist image image-smoke \
+	release-notes clean
 
 help:
-	@echo "install    editable install with dev extras"
-	@echo "lint       ruff check + ruff format --check"
-	@echo "format     ruff format (rewrites files)"
-	@echo "typecheck  mypy --strict"
-	@echo "test       pytest"
-	@echo "eval       score the deterministic pipeline against corpus/"
-	@echo "gate       eval, failing below rule@1 $(MIN_RULE_ACCURACY) or class $(MIN_CLASS_ACCURACY)"
-	@echo "check      lint + typecheck + test + gate, the targets CI runs"
+	@echo "install        editable install with dev extras"
+	@echo "lint           ruff check + ruff format --check"
+	@echo "format         ruff format (rewrites files)"
+	@echo "typecheck      mypy --strict"
+	@echo "test           pytest"
+	@echo "eval           score the deterministic pipeline against corpus/"
+	@echo "gate           eval, failing below rule@1 $(MIN_RULE_ACCURACY) or class $(MIN_CLASS_ACCURACY)"
+	@echo "check          lint + typecheck + test + gate, CI's test job"
+	@echo "dist           sdist + wheel into dist/, then twine check (needs build, twine)"
+	@echo "image          build the Docker image as $(IMAGE) (needs docker)"
+	@echo "image-smoke    run $(IMAGE) the ways CI and GitLab will (needs docker)"
+	@echo "release-notes  check \$$TAG against the version and changelog, print its notes"
 
 install:
 	$(PYTHON) -m pip install -e ".[dev]"
 
 lint:
-	$(PYTHON) -m ruff check src tests
-	$(PYTHON) -m ruff format --check src tests
+	$(PYTHON) -m ruff check src tests scripts
+	$(PYTHON) -m ruff format --check src tests scripts
 
 format:
-	$(PYTHON) -m ruff format src tests
+	$(PYTHON) -m ruff format src tests scripts
 
 typecheck:
 	$(PYTHON) -m mypy
@@ -73,6 +86,45 @@ gate:
 
 check: lint typecheck test gate
 
+# --strict turns twine's warnings into failures: PyPI will not let a version be
+# uploaded twice, so a broken long description is cheaper to catch here.
+dist:
+	rm -rf dist
+	$(PYTHON) -m build
+	$(PYTHON) -m twine check --strict dist/*
+
+# Not part of `check`: that has to run anywhere Python does, and these need a
+# Docker daemon. CI runs them in a job of their own. buildx with --load works
+# with both the default builder and a docker-container one, and leaves the
+# result where `docker run` can find it.
+image:
+	docker buildx build --load --build-arg VERSION=$(PACKAGE_VERSION) -t $(IMAGE) .
+
+# Each line is a promise the README makes about the image. The output is
+# captured before it is searched, so a container that fails after printing
+# the right text still fails the target.
+image-smoke:
+	@echo "--version reports $(PACKAGE_VERSION)"
+	@out=$$(docker run --rm $(IMAGE) --version) && echo "$$out" && \
+		test "$$out" = "pipelinemd $(PACKAGE_VERSION)"
+	@echo "the default command runs"
+	docker run --rm $(IMAGE) > /dev/null
+	@echo "distill - reads a trace on stdin, offline, and finds its rule and evidence"
+	@out=$$(docker run --rm -i --network none $(IMAGE) distill --color never - < $(SMOKE_TRACE)) && \
+		echo "$$out" | grep -F "runner.oom-killed" && echo "$$out" | grep -E "^Evidence +[0-9]+ of"
+	@echo "the [llm] extra is installed"
+	docker run --rm --entrypoint python $(IMAGE) -c "import anthropic; print(anthropic.__version__)"
+	@echo "it does not run as root"
+	@uid=$$(docker run --rm --entrypoint id $(IMAGE) -u) && echo "uid $$uid" && test "$$uid" != 0
+	@echo "a shell script runs with the entrypoint cleared, as GitLab runs one"
+	docker run --rm --entrypoint "" $(IMAGE) sh -c 'pipelinemd --version'
+
+# The tag comes from the environment, never the command line, and is only ever
+# expanded by the shell inside quotes: a tag name is text someone else chose,
+# and make would paste it into the recipe unquoted.
+release-notes:
+	@$(PYTHON) scripts/release_notes.py "$$TAG"
+
 clean:
-	rm -rf .pytest_cache .mypy_cache .ruff_cache .coverage htmlcov
+	rm -rf .pytest_cache .mypy_cache .ruff_cache .coverage htmlcov dist build
 	find . -name __pycache__ -type d -prune -exec rm -rf {} +

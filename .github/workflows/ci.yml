@@ -5,6 +5,10 @@ on:
     branches: ["**"]
   pull_request:
 
+# Nothing in CI writes to the repository, so its token cannot either.
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -43,3 +47,21 @@ jobs:
       # flag nobody runs, and the eval is a report rather than a guard.
       - name: Eval gate
         run: make gate PYTHON=python
+
+  # The image is what the README tells GitLab users to run, so it is built and
+  # exercised on every push, not first on a release tag. amd64 only: that is
+  # what the runner can execute natively, and the arm64 half is the same
+  # Dockerfile built under emulation by the release workflow. Kept out of the
+  # matrix above, which tests the package across Pythons and needs no Docker.
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Same targets as `make image image-smoke` locally, for the same reason
+      # as the steps above.
+      - name: Build
+        run: make image
+
+      - name: Smoke test
+        run: make image-smoke

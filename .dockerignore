@@ -1,0 +1,12 @@
+# The image build reads pyproject.toml, README.md, LICENSE and src/ and nothing
+# else. Allow-listing them keeps the context small, keeps job traces in the
+# corpus out of it, and means a stray local file can never end up in an image.
+*
+!pyproject.toml
+!README.md
+!LICENSE
+!src/
+
+# Even inside src/, never ship interpreter or tool droppings.
+**/__pycache__
+**/*.py[cod]

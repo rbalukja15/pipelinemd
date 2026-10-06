@@ -10,7 +10,16 @@
 
 pipelinemd:
   stage: .post
-  image: python:3.12-slim
+  # The published image already has pipelinemd and the [llm] extra installed,
+  # so there is no pip install to slow the job down or fail when PyPI is
+  # unreachable. Pinned to a minor version: it picks up patch releases, and a
+  # release that changes the report format cannot break this job unannounced -
+  # which `latest` would allow.
+  image:
+    name: ghcr.io/rbalukja15/pipelinemd:0.1
+    # The image's entrypoint is the pipelinemd CLI. GitLab runs the script
+    # below through a shell, so the entrypoint is cleared to let it.
+    entrypoint: [""]
   # .post runs after everything else, so by now the pipeline's fate is known.
   rules:
     - when: on_failure
@@ -19,8 +28,6 @@ pipelinemd:
   interruptible: true
   variables:
     GIT_STRATEGY: none
-  before_script:
-    - pip install --quiet 'pipelinemd[llm]'
   script:
     # CI_JOB_TOKEN and CI_PIPELINE_ID are picked up automatically.
     - pipelinemd diagnose --format markdown -o pipelinemd-diagnosis.md
