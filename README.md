@@ -139,8 +139,23 @@ make eval
 ```
 
 Runs the distiller and rule engine over 62 labelled traces in [`corpus/`](https://github.com/rbalukja15/pipelinemd/blob/main/corpus/README.md)
-and reports rule@1, evidence hit rate and exit-code accuracy per failure class.
-Offline and deterministic. Results and their caveats: [docs/evaluation.md](https://github.com/rbalukja15/pipelinemd/blob/main/docs/evaluation.md).
+and reports rule@1, class accuracy, evidence hit rate and exit-code accuracy
+per failure class. Offline and deterministic. Today:
+
+| Metric | Result | What it asks |
+| --- | --- | --- |
+| rule@1 | **55/55** (100%) | Did the expected rule rank first? Over the 55 cases a rule covers. |
+| class | **51/62** (82.3%) | Was the failure put in its labelled v1 class? Over every case. |
+| evidence | **62/62** (100%) | Did the line a human would point at survive into the excerpt? |
+| exit code | **62/62** (100%) | Was the runner's verdict read correctly? |
+| known gaps | **7/7** silent | Where no rule covers the failure, did the catalog stay quiet? |
+
+Class accuracy is 91% when the report says high confidence and 30% when it
+says low, which is why low is sent to human review. Every case is authored,
+so these are a regression signal, not a measurement of real-world accuracy.
+Results and their caveats: [docs/evaluation.md](https://github.com/rbalukja15/pipelinemd/blob/main/docs/evaluation.md).
+For a real log, see [pipelinemd run on its own CI](https://github.com/rbalukja15/pipelinemd/blob/main/docs/dogfood.md):
+it kept the cause in the excerpt, and exposed a rule that was too broad, now fixed.
 
 `make gate` is the same run with CI's thresholds, and runs on every push — a
 catalog regression fails the build rather than being noticed later.

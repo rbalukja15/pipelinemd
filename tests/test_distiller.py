@@ -60,6 +60,7 @@ def test_evidence_keeps_the_verdict(any_trace: tuple[str, str]) -> None:
 GITHUB_CAUSES = {
     "github/pytest_service_container": "FAILED orders/tests/test_refunds.py",
     "github/npm_eresolve_docker_build": "npm error Could not resolve dependency:",
+    "github/pip_metadata_missing_readme": "OSError: Readme file does not exist: README.md",
 }
 
 
