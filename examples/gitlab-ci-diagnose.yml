@@ -29,13 +29,23 @@ pipelinemd:
   variables:
     GIT_STRATEGY: none
   script:
-    # CI_JOB_TOKEN and CI_PIPELINE_ID are picked up automatically.
-    - pipelinemd diagnose --format markdown -o pipelinemd-diagnosis.md
-    - pipelinemd diagnose --format json -o pipelinemd-diagnosis.json
+    # CI_JOB_TOKEN and CI_PIPELINE_ID are picked up automatically. One run
+    # writes all three files, each format chosen by its extension, so the
+    # model is asked once and the files cannot disagree.
+    - >-
+      pipelinemd diagnose
+      -o pipelinemd-diagnosis.html
+      -o pipelinemd-diagnosis.md
+      -o pipelinemd-diagnosis.json
     - cat pipelinemd-diagnosis.md
   artifacts:
     when: always
     expire_in: 1 week
+    # Links the artifacts from the merge request. The HTML report is one
+    # self-contained page, also served at a stable URL:
+    # <project>/-/jobs/<job id>/artifacts/file/pipelinemd-diagnosis.html
+    expose_as: pipelinemd diagnosis
     paths:
+      - pipelinemd-diagnosis.html
       - pipelinemd-diagnosis.md
       - pipelinemd-diagnosis.json

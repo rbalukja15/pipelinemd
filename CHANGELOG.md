@@ -8,6 +8,26 @@ How a section becomes a release is in [docs/releasing.md](docs/releasing.md).
 
 ## [Unreleased]
 
+### Added
+
+- `--format html` writes the report as one self-contained page: inline styles,
+  no scripts, nothing fetched, light and dark mode, and a print layout. Log
+  text is escaped, evidence lines keep their original numbers as `#L<n>`
+  anchors, and the page says plainly whether it is rules only, a diagnosis the
+  model could not ground, or one that needs human review. `--all-jobs` puts
+  every job on one page with the run's total cost
+  ([#19](https://github.com/rbalukja15/pipelinemd/issues/19)).
+- `-o` can be given more than once to write one analysis in several formats,
+  each chosen by the file's extension, so the model is asked once rather than
+  once per file.
+
+### Changed
+
+- The example GitLab job writes `pipelinemd-diagnosis.html` beside the
+  markdown and JSON from a single run, and links the report from the merge
+  request with `expose_as`. It used to run the analysis once per format, which
+  asked the model twice and could leave two files that disagreed.
+
 ## [0.1.2] - 2026-10-06
 
 ### Added
