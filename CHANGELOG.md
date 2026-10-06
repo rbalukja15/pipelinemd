@@ -8,6 +8,15 @@ How a section becomes a release is in [docs/releasing.md](docs/releasing.md).
 
 ## [Unreleased]
 
+### Fixed
+
+- `pip.build-failed` no longer fires on pip's generic
+  `error: subprocess-exited-with-error` alone. pip prints that for any failing
+  build backend, so a `pyproject.toml` naming a README that did not exist was
+  reported at high confidence as a missing C compiler. Real compile failures
+  still match on their own lines. Found by running pipelinemd on its own early
+  CI failures ([#23](https://github.com/rbalukja15/pipelinemd/issues/23)).
+
 ## [0.1.2] - 2026-10-06
 
 ### Added

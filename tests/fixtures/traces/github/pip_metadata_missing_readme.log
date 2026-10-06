@@ -1,0 +1,210 @@
+﻿2026-08-27T09:25:44.8326054Z Current runner version: '2.336.0'
+2026-08-27T09:25:44.8348902Z ##[group]Runner Image Provisioner
+2026-08-27T09:25:44.8349776Z Hosted Compute Agent
+2026-08-27T09:25:44.8350334Z Version: 20260819.586
+2026-08-27T09:25:44.8351097Z Commit: 3cc4a88dfa507ef76119ad1bb3eccc6378bb2b76
+2026-08-27T09:25:44.8351756Z Build Date: 2026-08-18T23:20:18Z
+2026-08-27T09:25:44.8352388Z Worker ID: {2508396c-e2a5-41bb-97ba-9dc24f086fc8}
+2026-08-27T09:25:44.8353050Z Azure Region: centralus
+2026-08-27T09:25:44.8353566Z ##[endgroup]
+2026-08-27T09:25:44.8354722Z ##[group]Operating System
+2026-08-27T09:25:44.8355289Z Ubuntu
+2026-08-27T09:25:44.8355879Z 24.04.4
+2026-08-27T09:25:44.8356358Z LTS
+2026-08-27T09:25:44.8356864Z ##[endgroup]
+2026-08-27T09:25:44.8357339Z ##[group]Runner Image
+2026-08-27T09:25:44.8357908Z Image: ubuntu-24.04
+2026-08-27T09:25:44.8358428Z Version: 20260823.283.1
+2026-08-27T09:25:44.8359588Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20260823.283/images/ubuntu/Ubuntu2404-Readme.md
+2026-08-27T09:25:44.8361017Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20260823.283
+2026-08-27T09:25:44.8361891Z ##[endgroup]
+2026-08-27T09:25:44.8362917Z ##[group]GITHUB_TOKEN Permissions
+2026-08-27T09:25:44.8365325Z Contents: read
+2026-08-27T09:25:44.8365835Z Metadata: read
+2026-08-27T09:25:44.8366341Z Packages: read
+2026-08-27T09:25:44.8366851Z ##[endgroup]
+2026-08-27T09:25:44.8368643Z Secret source: Actions
+2026-08-27T09:25:44.8369573Z Prepare workflow directory
+2026-08-27T09:25:44.8666260Z Prepare all required actions
+2026-08-27T09:25:44.8712580Z Getting action download info
+2026-08-27T09:25:45.1398069Z Download action repository 'actions/checkout@v4' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+2026-08-27T09:25:45.2675193Z Download action repository 'actions/setup-python@v5' (SHA:a26af69be951a213d495a4c3e4e4022e16d87065)
+2026-08-27T09:25:45.4441498Z Complete job name: test (3.13)
+2026-08-27T09:25:45.5049442Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+2026-08-27T09:25:45.5056967Z ##[group]Run actions/checkout@v4
+2026-08-27T09:25:45.5057624Z with:
+2026-08-27T09:25:45.5058164Z   repository: rbalukja15/pipelinemd
+2026-08-27T09:25:45.5062146Z   token: ***
+2026-08-27T09:25:45.5062658Z   ssh-strict: true
+2026-08-27T09:25:45.5063145Z   ssh-user: git
+2026-08-27T09:25:45.5063603Z   persist-credentials: true
+2026-08-27T09:25:45.5064138Z   clean: true
+2026-08-27T09:25:45.5064608Z   sparse-checkout-cone-mode: true
+2026-08-27T09:25:45.5065182Z   fetch-depth: 1
+2026-08-27T09:25:45.5065655Z   fetch-tags: false
+2026-08-27T09:25:45.5066101Z   show-progress: true
+2026-08-27T09:25:45.5066597Z   lfs: false
+2026-08-27T09:25:45.5067135Z   submodules: false
+2026-08-27T09:25:45.5067653Z   set-safe-directory: true
+2026-08-27T09:25:45.5068196Z   allow-unsafe-pr-checkout: false
+2026-08-27T09:25:45.5068903Z ##[endgroup]
+2026-08-27T09:25:45.5981064Z Syncing repository: rbalukja15/pipelinemd
+2026-08-27T09:25:45.5983241Z ##[group]Getting Git version info
+2026-08-27T09:25:45.5984261Z Working directory is '/home/runner/work/pipelinemd/pipelinemd'
+2026-08-27T09:25:45.5985586Z [command]/usr/bin/git version
+2026-08-27T09:25:45.7557439Z git version 2.55.0
+2026-08-27T09:25:45.7575114Z ##[endgroup]
+2026-08-27T09:25:45.7588450Z Temporarily overriding HOME='/home/runner/work/_temp/c6fe1607-7801-48d7-ba46-c0bbc5420455' before making global git config changes
+2026-08-27T09:25:45.7589708Z Adding repository directory to the temporary git global config as a safe directory
+2026-08-27T09:25:45.7593926Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/pipelinemd/pipelinemd
+2026-08-27T09:25:45.7641127Z Deleting the contents of '/home/runner/work/pipelinemd/pipelinemd'
+2026-08-27T09:25:45.7644274Z ##[group]Initializing the repository
+2026-08-27T09:25:45.7648589Z [command]/usr/bin/git init /home/runner/work/pipelinemd/pipelinemd
+2026-08-27T09:25:45.7737603Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-08-27T09:25:45.7738833Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-08-27T09:25:45.7740216Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-08-27T09:25:45.7741372Z hint: call:
+2026-08-27T09:25:45.7742099Z hint:
+2026-08-27T09:25:45.7742880Z hint: 	git config --global init.defaultBranch <name>
+2026-08-27T09:25:45.7743685Z hint:
+2026-08-27T09:25:45.7744596Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-08-27T09:25:45.7745854Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-08-27T09:25:45.7746923Z hint:
+2026-08-27T09:25:45.7747589Z hint: 	git branch -m <name>
+2026-08-27T09:25:45.7748284Z hint:
+2026-08-27T09:25:45.7749236Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-08-27T09:25:45.7750724Z Initialized empty Git repository in /home/runner/work/pipelinemd/pipelinemd/.git/
+2026-08-27T09:25:45.7753087Z [command]/usr/bin/git remote add origin https://github.com/rbalukja15/pipelinemd
+2026-08-27T09:25:45.7791129Z ##[endgroup]
+2026-08-27T09:25:45.7792318Z ##[group]Disabling automatic garbage collection
+2026-08-27T09:25:45.7793610Z [command]/usr/bin/git config --local gc.auto 0
+2026-08-27T09:25:45.7819031Z ##[endgroup]
+2026-08-27T09:25:45.7820165Z ##[group]Setting up auth
+2026-08-27T09:25:45.7825179Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-08-27T09:25:45.7852532Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-08-27T09:25:45.8148926Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-08-27T09:25:45.8174152Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-08-27T09:25:45.8346080Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-08-27T09:25:45.8373463Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-08-27T09:25:45.8545269Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-08-27T09:25:45.8574889Z ##[endgroup]
+2026-08-27T09:25:45.8576091Z ##[group]Fetching the repository
+2026-08-27T09:25:45.8584705Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +4bfdc325eb457170cfd20ceef9c50cebca09ce02:refs/remotes/origin/feat/#12-log-distiller
+2026-08-27T09:25:46.4334434Z From https://github.com/rbalukja15/pipelinemd
+2026-08-27T09:25:46.4336439Z  * [new ref]         4bfdc325eb457170cfd20ceef9c50cebca09ce02 -> origin/feat/#12-log-distiller
+2026-08-27T09:25:46.4339664Z ##[endgroup]
+2026-08-27T09:25:46.4341169Z ##[group]Determining the checkout info
+2026-08-27T09:25:46.4342693Z ##[endgroup]
+2026-08-27T09:25:46.4349803Z [command]/usr/bin/git sparse-checkout disable
+2026-08-27T09:25:46.4395850Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-08-27T09:25:46.4422852Z ##[group]Checking out the ref
+2026-08-27T09:25:46.4439233Z [command]/usr/bin/git checkout --progress --force -B feat/#12-log-distiller refs/remotes/origin/feat/#12-log-distiller
+2026-08-27T09:25:46.4584232Z Switched to a new branch 'feat/#12-log-distiller'
+2026-08-27T09:25:46.4592598Z branch 'feat/#12-log-distiller' set up to track 'origin/feat/#12-log-distiller'.
+2026-08-27T09:25:46.4596257Z ##[endgroup]
+2026-08-27T09:25:46.4623966Z [command]/usr/bin/git log -1 --format=%H
+2026-08-27T09:25:46.4643010Z 4bfdc325eb457170cfd20ceef9c50cebca09ce02
+2026-08-27T09:25:46.4997392Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+2026-08-27T09:25:46.5002828Z ##[group]Run actions/setup-python@v5
+2026-08-27T09:25:46.5004073Z with:
+2026-08-27T09:25:46.5005035Z   python-version: 3.13
+2026-08-27T09:25:46.5006116Z   check-latest: false
+2026-08-27T09:25:46.5015700Z   token: ***
+2026-08-27T09:25:46.5016717Z   update-environment: true
+2026-08-27T09:25:46.5017885Z   allow-prereleases: false
+2026-08-27T09:25:46.5018995Z   freethreaded: false
+2026-08-27T09:25:46.5019993Z ##[endgroup]
+2026-08-27T09:25:46.6298261Z ##[group]Installed versions
+2026-08-27T09:25:46.6786202Z (node:2006) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-08-27T09:25:46.6789837Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-08-27T09:25:46.6792117Z Successfully set up CPython (3.13.15)
+2026-08-27T09:25:46.6794384Z ##[endgroup]
+2026-08-27T09:25:46.6965134Z ##[group]Run python -m pip install --upgrade pip
+2026-08-27T09:25:46.6966677Z [36;1mpython -m pip install --upgrade pip[0m
+2026-08-27T09:25:46.6967905Z [36;1mpip install -e ".[dev]"[0m
+2026-08-27T09:25:46.7005658Z shell: /usr/bin/bash -e {0}
+2026-08-27T09:25:46.7006664Z env:
+2026-08-27T09:25:46.7007650Z   pythonLocation: /opt/hostedtoolcache/Python/3.13.15/x64
+2026-08-27T09:25:46.7009308Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.13.15/x64/lib/pkgconfig
+2026-08-27T09:25:46.7011111Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.15/x64
+2026-08-27T09:25:46.7012589Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.15/x64
+2026-08-27T09:25:46.7014066Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.15/x64
+2026-08-27T09:25:46.7015533Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.13.15/x64/lib
+2026-08-27T09:25:46.7016840Z ##[endgroup]
+2026-08-27T09:25:49.9555581Z Requirement already satisfied: pip in /opt/hostedtoolcache/Python/3.13.15/x64/lib/python3.13/site-packages (26.2.1)
+2026-08-27T09:25:51.0711480Z Obtaining file:///home/runner/work/pipelinemd/pipelinemd
+2026-08-27T09:25:51.0726291Z   Installing build dependencies: started
+2026-08-27T09:25:51.9635842Z   Installing build dependencies: finished with status 'done'
+2026-08-27T09:25:51.9641948Z   Checking if build backend supports build_editable: started
+2026-08-27T09:25:52.0025276Z   Checking if build backend supports build_editable: finished with status 'done'
+2026-08-27T09:25:52.0033593Z   Getting requirements to build editable: started
+2026-08-27T09:25:52.1280357Z   Getting requirements to build editable: finished with status 'done'
+2026-08-27T09:25:52.1293114Z   Installing backend dependencies: started
+2026-08-27T09:25:52.6474095Z   Installing backend dependencies: finished with status 'done'
+2026-08-27T09:25:52.6479074Z   Preparing editable metadata (pyproject.toml): started
+2026-08-27T09:25:53.0685823Z   Preparing editable metadata (pyproject.toml): finished with status 'error'
+2026-08-27T09:25:53.0727855Z   error: subprocess-exited-with-error
+2026-08-27T09:25:53.0728684Z   
+2026-08-27T09:25:53.0729689Z   × Preparing editable metadata (pyproject.toml) did not run successfully.
+2026-08-27T09:25:53.0731229Z   │ exit code: 1
+2026-08-27T09:25:53.0731964Z   ╰─> [32 lines of output]
+2026-08-27T09:25:53.0732688Z       Traceback (most recent call last):
+2026-08-27T09:25:53.0739836Z         File "/opt/hostedtoolcache/Python/3.13.15/x64/lib/python3.13/site-packages/pip/_vendor/pyproject_hooks/_in_process/_in_process.py", line 195, in prepare_metadata_for_build_editable
+2026-08-27T09:25:53.0741368Z           hook = backend.prepare_metadata_for_build_editable
+2026-08-27T09:25:53.0742180Z                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-08-27T09:25:53.0742986Z       AttributeError: module 'hatchling.build' has no attribute 'prepare_metadata_for_build_editable'
+2026-08-27T09:25:53.0744132Z       
+2026-08-27T09:25:53.0744753Z       During handling of the above exception, another exception occurred:
+2026-08-27T09:25:53.0745364Z       
+2026-08-27T09:25:53.0745812Z       Traceback (most recent call last):
+2026-08-27T09:25:53.0746957Z         File "/opt/hostedtoolcache/Python/3.13.15/x64/lib/python3.13/site-packages/pip/_vendor/pyproject_hooks/_in_process/_in_process.py", line 389, in <module>
+2026-08-27T09:25:53.0747942Z           main()
+2026-08-27T09:25:53.0748368Z           ~~~~^^
+2026-08-27T09:25:53.0749447Z         File "/opt/hostedtoolcache/Python/3.13.15/x64/lib/python3.13/site-packages/pip/_vendor/pyproject_hooks/_in_process/_in_process.py", line 373, in main
+2026-08-27T09:25:53.0751272Z           json_out["return_val"] = hook(**hook_input["kwargs"])
+2026-08-27T09:25:53.0751904Z                                    ~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+2026-08-27T09:25:53.0753156Z         File "/opt/hostedtoolcache/Python/3.13.15/x64/lib/python3.13/site-packages/pip/_vendor/pyproject_hooks/_in_process/_in_process.py", line 204, in prepare_metadata_for_build_editable
+2026-08-27T09:25:53.0754641Z           whl_basename = build_hook(metadata_directory, config_settings)
+2026-08-27T09:25:53.0755684Z         File "/tmp/pip-build-env-ume_8jq2/overlay/lib/python3.13/site-packages/hatchling/build.py", line 83, in build_editable
+2026-08-27T09:25:53.0756827Z           return os.path.basename(next(builder.build(directory=wheel_directory, versions=["editable"])))
+2026-08-27T09:25:53.0757635Z                                   ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-08-27T09:25:53.0758656Z         File "/tmp/pip-build-env-ume_8jq2/overlay/lib/python3.13/site-packages/hatchling/builders/plugin/interface.py", line 92, in build
+2026-08-27T09:25:53.0759546Z           self.metadata.validate_fields()
+2026-08-27T09:25:53.0759992Z           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+2026-08-27T09:25:53.0761165Z         File "/tmp/pip-build-env-ume_8jq2/overlay/lib/python3.13/site-packages/hatchling/metadata/core.py", line 267, in validate_fields
+2026-08-27T09:25:53.0761805Z           self.core.validate_fields()
+2026-08-27T09:25:53.0762146Z           ~~~~~~~~~~~~~~~~~~~~~~~~~^^
+2026-08-27T09:25:53.0762825Z         File "/tmp/pip-build-env-ume_8jq2/overlay/lib/python3.13/site-packages/hatchling/metadata/core.py", line 1444, in validate_fields
+2026-08-27T09:25:53.0763396Z           getattr(self, attribute)
+2026-08-27T09:25:53.0763724Z           ~~~~~~~^^^^^^^^^^^^^^^^^
+2026-08-27T09:25:53.0764287Z         File "/tmp/pip-build-env-ume_8jq2/overlay/lib/python3.13/site-packages/hatchling/metadata/core.py", line 537, in readme
+2026-08-27T09:25:53.0764811Z           raise OSError(message)
+2026-08-27T09:25:53.0765194Z       OSError: Readme file does not exist: README.md
+2026-08-27T09:25:53.0765595Z       [end of output]
+2026-08-27T09:25:53.0765897Z   
+2026-08-27T09:25:53.0766296Z   note: This error originates from a subprocess, and is likely not a problem with pip.
+2026-08-27T09:25:53.0766815Z error: metadata-generation-failed
+2026-08-27T09:25:53.0767063Z 
+2026-08-27T09:25:53.0767457Z × Encountered error while generating package metadata.
+2026-08-27T09:25:53.0768024Z ╰─> from file:///home/runner/work/pipelinemd/pipelinemd
+2026-08-27T09:25:53.0768258Z 
+2026-08-27T09:25:53.0768471Z note: This is an issue with the package mentioned above, not pip.
+2026-08-27T09:25:53.0768900Z hint: See above for details.
+2026-08-27T09:25:53.1278313Z ##[error]Process completed with exit code 1.
+2026-08-27T09:25:53.1446933Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+2026-08-27T09:25:53.1447984Z Post job cleanup.
+2026-08-27T09:25:53.2196101Z [command]/usr/bin/git version
+2026-08-27T09:25:53.2231255Z git version 2.55.0
+2026-08-27T09:25:53.2259945Z Temporarily overriding HOME='/home/runner/work/_temp/707ebf4c-e169-4a52-8962-b4fce1d750b3' before making global git config changes
+2026-08-27T09:25:53.2261567Z Adding repository directory to the temporary git global config as a safe directory
+2026-08-27T09:25:53.2265164Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/pipelinemd/pipelinemd
+2026-08-27T09:25:53.2298349Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-08-27T09:25:53.2328052Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-08-27T09:25:53.2516676Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-08-27T09:25:53.2544010Z http.https://github.com/.extraheader
+2026-08-27T09:25:53.2553712Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-08-27T09:25:53.2580358Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-08-27T09:25:53.2788182Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-08-27T09:25:53.2814118Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-08-27T09:25:53.3232747Z Cleaning up orphan processes
+2026-08-27T09:25:53.3467293Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-python@v5. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

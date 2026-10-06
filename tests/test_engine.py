@@ -54,6 +54,33 @@ def test_top_rule_names_the_real_failure_in_a_github_log(
     )
 
 
+def test_a_failed_metadata_step_is_not_called_a_compiler_problem(
+    trace: Callable[[str], str],
+) -> None:
+    """From pipelinemd's own CI: hatchling could not find README.md.
+
+    pip wraps it in `error: subprocess-exited-with-error`, which pip.build-failed
+    used to match at high confidence, with advice to install a C toolchain.
+    Nothing in the catalog covers a metadata failure, so saying nothing - and
+    sending it to review - is the right answer until a rule does.
+    """
+    hits = match_rules(distill(trace("github/pip_metadata_missing_readme")))
+    assert "pip.build-failed" not in [hit.rule.id for hit in hits]
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "  Failed building wheel for psycopg2",
+        "error: command '/usr/bin/gcc' failed with exit code 1",
+        "fatal error: Python.h: No such file or directory",
+    ],
+)
+def test_a_real_compile_failure_still_names_pip_build_failed(line: str) -> None:
+    hits = match_rules(distill(f"$ pip install psycopg2\n{line}\nERROR: Job failed: exit code 1\n"))
+    assert hits and hits[0].rule.id == "pip.build-failed"
+
+
 def test_a_service_container_s_log_is_fallout(trace: Callable[[str], str]) -> None:
     """Postgres prints "sh: locale: not found" while GitHub tears it down."""
     hits = match_rules(distill(trace("github/pytest_service_container")))

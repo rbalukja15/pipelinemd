@@ -654,7 +654,10 @@ PYTHON_RULES: tuple[Rule, ...] = (
             r"Failed building wheel for",
             r"error: command '\S*(?:gcc|cc|clang|g\+\+)' failed",
             r"Microsoft Visual C\+\+ \d+\.\d+ is required",
-            r"error: subprocess-exited-with-error",
+            # Not `error: subprocess-exited-with-error` on its own: pip prints it
+            # for any failing build backend, including a metadata step that
+            # compiles nothing (a pyproject naming a README that is missing),
+            # and the toolchain advice below is wrong there.
             r"fatal error: \S+\.h: No such file or directory",
         ),
         confidence=Confidence.HIGH,
