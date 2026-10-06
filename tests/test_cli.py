@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import re
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -771,6 +772,55 @@ def test_every_breached_gate_is_reported_including_class(tmp_path: Path) -> None
     )
     assert code == EXIT_BELOW_THRESHOLD
     assert "rule@1" in err and "class" in err
+
+
+# -- the evidence gate (#14) -------------------------------------------------
+
+
+def _lost_evidence_corpus(tmp_path: Path) -> str:
+    """One case whose marker is nowhere in its trace, so it cannot survive."""
+    corpus = Path(_missing_corpus(tmp_path))
+    case = json.loads((corpus / "corpus.jsonl").read_text(encoding="utf-8"))
+    case["evidence_marker"] = "this text is not in the trace"
+    (corpus / "corpus.jsonl").write_text(json.dumps(case) + "\n", encoding="utf-8")
+    return str(corpus)
+
+
+def test_eval_evidence_gate_fails_and_names_the_case(tmp_path: Path) -> None:
+    code, out, err = run(
+        "eval", "--corpus", _lost_evidence_corpus(tmp_path), "--min-evidence-rate", "1.0"
+    )
+    assert code == EXIT_BELOW_THRESHOLD
+    assert "evidence 0.0% is below the required 100.0%" in err
+    assert "missing from: one" in err
+    assert "Evidence misses (1)" in out
+
+
+def test_eval_evidence_gate_passes_when_the_line_survives(tmp_path: Path) -> None:
+    corpus = _missing_corpus(tmp_path)
+    assert run("eval", "--corpus", corpus, "--min-evidence-rate", "1.0")[0] == EXIT_OK
+
+
+def test_eval_json_lists_the_evidence_misses(tmp_path: Path) -> None:
+    code, out, _err = run("eval", "--corpus", _lost_evidence_corpus(tmp_path), "-f", "json")
+    assert code == EXIT_OK
+    misses = json.loads(out)["evidence_misses"]
+    assert misses == [{"id": "one", "evidence_marker": "this text is not in the trace"}]
+
+
+@pytest.mark.parametrize("rate", ["100", "-0.5", "2"])
+def test_an_evidence_floor_outside_zero_to_one_is_a_usage_error(rate: str) -> None:
+    code, out, err = run("eval", "--min-evidence-rate", rate)
+    assert code == EXIT_USAGE
+    assert "between 0 and 1" in err
+    assert out == ""
+
+
+def test_the_gate_holds_every_corpus_case_to_its_evidence_line() -> None:
+    """#14: CI fails if any corpus case loses the line a human would point at."""
+    makefile = (Path(__file__).parents[1] / "Makefile").read_text(encoding="utf-8")
+    assert re.search(r"^MIN_EVIDENCE_RATE \?= 1\.0$", makefile, re.M)
+    assert "--min-evidence-rate $(MIN_EVIDENCE_RATE)" in makefile
 
 
 def test_eval_help_names_every_metric_it_reports() -> None:

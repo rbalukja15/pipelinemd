@@ -400,7 +400,7 @@ pipelinemd eval --corpus path/to/other      # score a different corpus
 `--min-rule-accuracy` would be a flag nobody runs, and everything above would
 be a report rather than a guard.
 
-Three thresholds, set in the [Makefile](../Makefile):
+Four thresholds, set in the [Makefile](../Makefile):
 
 **`MIN_RULE_ACCURACY = 0.92`.** Raised from 0.85 now that rule@1 is 55/55: 0.92
 is 51/55, so the build fails on the fifth regression. The headroom is still
@@ -426,6 +426,18 @@ arrived with the metric, after review pointed out that promoting `class` to a
 headline number without gating it repeated the gap-false-positive mistake from
 #41. As with the rule floor, lowering it in a commit that says why is the
 intended response to adding hard traces.
+
+**`MIN_EVIDENCE_RATE = 1.0`.** Every case, gaps included, must keep the line
+its label marks. The other floors leave headroom because hard observed traces
+will often have no rule yet, and a missing rule is a catalog gap rather than a
+regression. The evidence rate does not depend on a rule: it asks whether the
+line that explains the failure survived into the excerpt, which is all the
+model is ever shown. Losing it means a diagnosis written without its cause,
+the one failure the distiller exists to prevent. So a case that loses its line
+fails the build and is named on stderr, and an observed trace the distiller
+cannot keep is a distiller bug to fix first. If it cannot be fixed yet, the
+floor is lowered in a commit that names the case
+([#14](https://github.com/rbalukja15/pipelinemd/issues/14)).
 
 **`MAX_GAP_FALSE_POSITIVES = 0`.** Known gaps are excluded from every rate, so
 a rule that starts firing on one moves *no number at all* — `--min-rule-accuracy`

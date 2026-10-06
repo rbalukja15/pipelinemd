@@ -27,6 +27,10 @@ How a section becomes a release is in [docs/releasing.md](docs/releasing.md).
 - `-o` can be given more than once to write one analysis in several formats,
   each chosen by the file's extension, so the model is asked once rather than
   once per file.
+- `pipelinemd eval --min-evidence-rate` fails when the share of corpus cases
+  whose marked line survives into the excerpt drops below a floor, and names
+  the cases that lost it. `make gate`, and so CI, now holds every case to it
+  ([#14](https://github.com/rbalukja15/pipelinemd/issues/14)).
 
 ### Changed
 

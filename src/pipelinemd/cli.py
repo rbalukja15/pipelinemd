@@ -256,6 +256,15 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     eval_parser.add_argument(
+        "--min-evidence-rate",
+        type=float,
+        metavar="RATE",
+        help=(
+            "Exit non-zero if the evidence hit rate falls below this (0-1): the share "
+            "of cases whose marked line survives into the excerpt the model is shown."
+        ),
+    )
+    eval_parser.add_argument(
         "--max-gap-false-positives",
         type=int,
         metavar="N",
@@ -646,6 +655,11 @@ def cmd_eval(args: argparse.Namespace, stdout: IO[str], stderr: IO[str], stdin: 
     class_floor = args.min_class_accuracy
     if class_floor is not None and not 0.0 <= class_floor <= 1.0:
         raise UsageError(f"--min-class-accuracy takes a rate between 0 and 1, not {class_floor:g}.")
+    evidence_floor = args.min_evidence_rate
+    if evidence_floor is not None and not 0.0 <= evidence_floor <= 1.0:
+        raise UsageError(
+            f"--min-evidence-rate takes a rate between 0 and 1, not {evidence_floor:g}."
+        )
     ceiling = args.max_gap_false_positives
     if ceiling is not None and ceiling < 0:
         raise UsageError(f"--max-gap-false-positives cannot be negative, got {ceiling}.")
@@ -667,6 +681,13 @@ def cmd_eval(args: argparse.Namespace, stdout: IO[str], stderr: IO[str], stdin: 
     if class_floor is not None and report.class_accuracy < class_floor:
         stderr.write(
             f"class {report.class_accuracy:.1%} is below the required {class_floor:.1%}.\n"
+        )
+        failed = True
+    if evidence_floor is not None and report.evidence_hit_rate < evidence_floor:
+        names = ", ".join(r.case.id for r in report.evidence_misses)
+        stderr.write(
+            f"evidence {report.evidence_hit_rate:.1%} is below the required "
+            f"{evidence_floor:.1%}; the marked line is missing from: {names}.\n"
         )
         failed = True
     false_positives = len(report.gap_false_positives)

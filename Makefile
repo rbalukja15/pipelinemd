@@ -29,6 +29,15 @@ MIN_RULE_ACCURACY ?= 0.92
 # to adding hard traces, not a failure.
 MIN_CLASS_ACCURACY ?= 0.78
 
+# The evidence floor. Unlike rule@1, the evidence rate does not depend on a
+# rule existing for the failure: it asks whether the line that explains it
+# survived into the excerpt, which is all the model is ever shown. A miss means
+# a diagnosis written without its cause, the failure the distiller exists to
+# prevent, so the floor is every case. A hard observed trace that the distiller
+# cannot keep is a distiller bug to fix; if it cannot be fixed yet, lower this
+# in a commit that names the case.
+MIN_EVIDENCE_RATE ?= 1.0
+
 # Known gaps are excluded from every rate, so a rule that starts firing on one
 # moves no number. Zero tolerance here: the catalog growing a confident wrong
 # answer where it used to stay silent is a regression worth failing over.
@@ -52,7 +61,7 @@ help:
 	@echo "typecheck      mypy --strict"
 	@echo "test           pytest"
 	@echo "eval           score the deterministic pipeline against corpus/"
-	@echo "gate           eval, failing below rule@1 $(MIN_RULE_ACCURACY) or class $(MIN_CLASS_ACCURACY)"
+	@echo "gate           eval, failing below rule@1 $(MIN_RULE_ACCURACY), class $(MIN_CLASS_ACCURACY) or evidence $(MIN_EVIDENCE_RATE)"
 	@echo "check          lint + typecheck + test + gate, CI's test job"
 	@echo "dist           sdist + wheel into dist/, then twine check (needs build, twine)"
 	@echo "image          build the Docker image as $(IMAGE) (needs docker)"
@@ -82,6 +91,7 @@ gate:
 	$(PYTHON) -m pipelinemd eval \
 		--min-rule-accuracy $(MIN_RULE_ACCURACY) \
 		--min-class-accuracy $(MIN_CLASS_ACCURACY) \
+		--min-evidence-rate $(MIN_EVIDENCE_RATE) \
 		--max-gap-false-positives $(MAX_GAP_FALSE_POSITIVES)
 
 check: lint typecheck test gate
