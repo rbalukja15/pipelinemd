@@ -4,6 +4,10 @@ pipelinemd is a pipeline of pure stages with one impure edge at each end:
 fetching a trace at the front, optionally asking a model at the back.
 Everything between is deterministic and independently testable.
 
+Why it is split this way, and what that costs, is recorded in
+[ADR-0001](adr/0001-stack-and-scope.md); later decisions are indexed in
+[`adr/`](adr/README.md).
+
 ```
 GitLab API ─┐
             ├─► raw trace ─► clean ─► score ─► window ─► evidence ─┬─► rules ──┬─► render
@@ -299,6 +303,12 @@ to look like structure.
 
 Redaction is mitigation, not a guarantee. A secret in a shape no pattern
 matches will pass through.
+
+GitLab credentials are the other boundary. The client only issues `GET`s, a
+token travels only in a header, and a token from the environment is only sent
+to the instance it was configured for, never to whatever host a pasted URL
+names. Writes, when #24 adds them, are opt-in and use their own credential.
+[ADR-0002](adr/0002-gitlab-access.md) has the full access model.
 
 ## Extending it
 
