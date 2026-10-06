@@ -10,6 +10,7 @@ from pipelinemd.distill.extract import (
     score_line,
     select_evidence,
 )
+from pipelinemd.distill.trace import POST_JOB_SECTION
 from pipelinemd.models import TraceLine
 
 
@@ -25,6 +26,9 @@ def _lines(texts: list[str]) -> list[TraceLine]:
     [
         "ERROR: Job failed: exit code 1",
         "npm ERR! code ERESOLVE",
+        "npm error code ERESOLVE",
+        "#9 1.476 npm error code ERESOLVE",
+        "##[error]Process completed with exit code 1.",
         "fatal: Authentication failed for https://gitlab.com/x.git",
         "Traceback (most recent call last):",
         "no space left on device",
@@ -63,6 +67,24 @@ def test_signals_are_reported_by_name() -> None:
     assert "npm-err" in signals
 
 
+def test_npm_10_wording_is_the_same_signal() -> None:
+    """npm 10 prints "npm error" where earlier versions printed "npm ERR!"."""
+    assert "npm-err" in score_line("npm error code ERESOLVE")[1]
+    assert "npm-err" not in score_line("npm warn deprecated inflight@1.0.6")[1]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "npm error code ERESOLVE",
+        'ERROR: process "/bin/sh -c npm ci" did not complete successfully: exit code: 1',
+    ],
+)
+def test_a_buildkit_prefix_does_not_hide_a_signal(text: str) -> None:
+    assert score_line(f"#9 1.481 {text}") == score_line(text)
+    assert score_line(f"#9 {text}") == score_line(text)
+
+
 def test_find_anchors_returns_trace_order() -> None:
     lines = _lines(["quiet", "npm ERR! boom", "quiet", "ERROR: Job failed: exit code 1"])
     anchors = find_anchors(lines)
@@ -76,6 +98,21 @@ def test_tail_is_always_kept_even_when_nothing_anchors() -> None:
     assert blocks, "the runner's verdict lives at the end; never drop the tail"
     last = blocks[-1].lines[-1]
     assert last.number + last.repeat - 1 == 200
+
+
+def test_the_tail_ends_where_github_s_post_job_steps_begin() -> None:
+    """GitHub's verdict comes before its cleanup, so the tail must too."""
+    texts = [f"routine line {i}" for i in range(100)] + ["last line of the failing step"]
+    lines = _lines(texts) + [
+        TraceLine(
+            number=number, raw_number=number, text=f"cleanup {number}", section=POST_JOB_SECTION
+        )
+        for number in range(102, 162)
+    ]
+    blocks, _ = select_evidence(lines, threshold=1000.0, tail_lines=5)
+    kept = [line.text for block in blocks for line in block.lines]
+    assert kept[-1] == "last line of the failing step"
+    assert not any(text.startswith("cleanup") for text in kept)
 
 
 def test_budget_is_respected() -> None:

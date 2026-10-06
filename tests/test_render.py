@@ -10,6 +10,7 @@ import pytest
 
 from pipelinemd.cost import PRICES_AS_OF
 from pipelinemd.distill import distill
+from pipelinemd.distill.trace import POST_JOB_SECTION
 from pipelinemd.models import (
     Category,
     Citation,
@@ -122,6 +123,16 @@ def test_blank_lines_do_not_take_slots_from_content(report: Report) -> None:
     lines, _ = select_display_lines(report.distilled, 8)
     blanks = [line for line in lines if not line.text.strip()]
     assert len(blanks) <= 1
+
+
+def test_github_post_job_lines_take_no_display_slots(trace: Callable[[str], str]) -> None:
+    """A service container's log must not push the failure off screen."""
+    lines, dropped = select_display_lines(distill(trace("github/pytest_service_container")), 10)
+    assert dropped > 0
+    texts = [line.text for line in lines]
+    assert texts[-1] == "##[error]Process completed with exit code 1."
+    assert any(text.startswith("FAILED orders/tests/test_refunds.py") for text in texts)
+    assert all(line.section != POST_JOB_SECTION for line in lines)
 
 
 # -- terminal ---------------------------------------------------------------

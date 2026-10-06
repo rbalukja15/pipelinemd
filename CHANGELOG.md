@@ -15,6 +15,22 @@ How a section becomes a release is in [docs/releasing.md](docs/releasing.md).
   from its report instead of the raw log. It runs the rules only, so it needs
   no Anthropic API key.
 
+### Fixed
+
+- On a GitHub Actions log, what runs after GitHub's verdict
+  (`##[error]Process completed with exit code N.`) is now treated as fallout,
+  as GitLab's `after_script` already was. That covers `if: failure()` steps,
+  post-job cleanup and service container logs. A Postgres service printing
+  `sh: locale: not found` while it shut down had been reported as the cause
+  of failed test and install jobs, with a `yaml_patch` fix. The excerpt now
+  ends at the verdict instead of in the cleanup, and the verdict is reported
+  as the job's failure reason. Exit codes printed during cleanup are ignored.
+- npm 10's `npm error` lines are read like the `npm ERR!` lines earlier
+  versions printed, both when choosing the excerpt and in the npm rules. Lines
+  inside a `docker build` are scored without BuildKit's `#9 1.481` prefix, so
+  an `npm ci` failure in a Dockerfile now shows the dependency conflict
+  itself.
+
 ## [0.1.1] - 2026-10-06
 
 ### Fixed

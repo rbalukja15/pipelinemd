@@ -36,6 +36,52 @@ def test_top_rule_names_the_real_failure(
     )
 
 
+# GitHub Actions logs, with their post-job steps and service containers.
+EXPECTED_TOP_RULE_GITHUB = {
+    "github/pytest_service_container": "test.pytest-failed",
+    "github/npm_eresolve_docker_build": "npm.eresolve",
+}
+
+
+@pytest.mark.parametrize(("name", "rule_id"), sorted(EXPECTED_TOP_RULE_GITHUB.items()))
+def test_top_rule_names_the_real_failure_in_a_github_log(
+    trace: Callable[[str], str], name: str, rule_id: str
+) -> None:
+    hits = match_rules(distill(trace(name)))
+    assert hits, f"{name}: no rule fired"
+    assert hits[0].rule.id == rule_id, (
+        f"{name}: expected {rule_id} first, got {[hit.rule.id for hit in hits[:3]]}"
+    )
+
+
+def test_a_service_container_s_log_is_fallout(trace: Callable[[str], str]) -> None:
+    """Postgres prints "sh: locale: not found" while GitHub tears it down."""
+    hits = match_rules(distill(trace("github/pytest_service_container")))
+    ranked = [hit.rule.id for hit in hits]
+    assert ranked.index("test.pytest-failed") < ranked.index("shell.command-not-found")
+
+
+@pytest.mark.parametrize(
+    ("line", "rule_id"),
+    [
+        ("npm error code ERESOLVE", "npm.eresolve"),
+        ("npm error code E404", "npm.registry-404"),
+        ("npm error 404 Not Found - GET https://registry.npmjs.org/@shop%2fui", "npm.registry-404"),
+        ("npm error code E401", "npm.registry-auth"),
+        ("npm error code E403", "npm.registry-auth"),
+        (
+            "npm error 401 Unauthorized - GET https://registry.npmjs.org/@shop%2fui",
+            "npm.registry-auth",
+        ),
+        ("npm error code EBADENGINE", "npm.bad-engine"),
+    ],
+)
+def test_npm_rules_read_npm_10_wording(line: str, rule_id: str) -> None:
+    """npm 10 prints "npm error" where earlier versions printed "npm ERR!"."""
+    hits = match_rules(distill(f"{line}\nERROR: Job failed: exit code 1\n"))
+    assert rule_id in {hit.rule.id for hit in hits}
+
+
 def test_cleanup_noise_never_outranks_the_real_cause(
     trace: Callable[[str], str],
 ) -> None:

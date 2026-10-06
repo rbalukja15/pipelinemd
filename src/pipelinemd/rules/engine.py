@@ -11,6 +11,7 @@ from __future__ import annotations
 import re
 from functools import lru_cache
 
+from ..distill.trace import POST_JOB_SECTION
 from ..models import Confidence, DistilledLog, Rule, RuleHit
 from .catalog import ALL_RULES
 
@@ -66,7 +67,9 @@ WRONG_MACHINE_WHEN_RESTATED: frozenset[str] = frozenset({"docker.daemon-unreacha
 # gitlab-runner sections that only run *after* the script has already decided
 # the job's fate. A rule firing in one of these is describing fallout - the
 # artifact upload that found nothing because the build never produced it - so
-# it must not outrank a hit in the script itself.
+# it must not outrank a hit in the script itself. GitHub Actions has no such
+# markers; everything it runs after its verdict is read into one section of
+# its own, which is fallout for the same reason.
 CLEANUP_SECTIONS = frozenset(
     {
         "after_script",
@@ -75,6 +78,7 @@ CLEANUP_SECTIONS = frozenset(
         "upload_artifacts_on_success",
         "upload_artifacts_on_failure",
         "cleanup_file_variables",
+        POST_JOB_SECTION,
     }
 )
 

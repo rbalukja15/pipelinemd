@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from pipelinemd.distill import distill
-from pipelinemd.distill.trace import MAX_LINE_CHARS, clean_trace
+from pipelinemd.distill.trace import MAX_LINE_CHARS, POST_JOB_SECTION, clean_trace
 from pipelinemd.rules.engine import match_rules
 
 from .fixtures.secrets import GITLAB_PAT_PLAIN
@@ -198,3 +200,59 @@ def test_secrets_are_gone_by_the_time_lines_exist() -> None:
     raw = f"export TOKEN={GITLAB_PAT_PLAIN}\n"
     cleaned = clean_trace(raw)
     assert GITLAB_PAT_PLAIN not in cleaned.lines[0].text
+
+
+GITHUB_VERDICT = "##[error]Process completed with exit code 1."
+
+
+def test_github_post_job_steps_are_read_as_one_section(trace: Callable[[str], str]) -> None:
+    """Everything GitHub runs after its verdict is fallout, like after_script."""
+    cleaned = clean_trace(trace("github/pytest_service_container"))
+    verdict = next(line for line in cleaned.lines if line.text == GITHUB_VERDICT)
+    assert verdict.section is None
+    after = [line for line in cleaned.lines if line.number > verdict.number]
+    assert after
+    assert all(line.section == POST_JOB_SECTION for line in after)
+    post_job = next(section for section in cleaned.sections if section.name == POST_JOB_SECTION)
+    assert post_job.start_line == verdict.number + 1
+    assert not post_job.failed_open, "the job did not die in its cleanup"
+
+
+def test_github_verdict_is_the_failure_reason_and_the_exit_code() -> None:
+    raw = (
+        "2026-10-05T09:10:22.0000000Z FAILED tests/test_cart.py::test_total - assert 1 == 2\n"
+        f"2026-10-05T09:10:22.1000000Z {GITHUB_VERDICT}\n"
+        "2026-10-05T09:10:22.2000000Z Print service container logs: shop_postgres16alpine\n"
+        "2026-10-05T09:10:22.3000000Z  LOG:  background worker (PID 62) exited with exit code 3\n"
+    )
+    cleaned = clean_trace(raw)
+    assert cleaned.failure_reason == GITHUB_VERDICT
+    assert cleaned.exit_code == 1, "a service container's own exit code is not the job's"
+
+
+def test_a_github_job_that_failed_in_an_action_starts_post_job_at_its_cleanup() -> None:
+    """An action's failure prints no "Process completed" line."""
+    raw = (
+        "2026-10-05T09:10:22.0000000Z ##[error]Unable to find Node version '25' for linux x64\n"
+        "2026-10-05T09:10:22.1000000Z Post job cleanup.\n"
+        "2026-10-05T09:10:22.2000000Z [command]/usr/bin/git version\n"
+    )
+    cleaned = clean_trace(raw)
+    assert [line.section for line in cleaned.lines[:3]] == [
+        None,
+        POST_JOB_SECTION,
+        POST_JOB_SECTION,
+    ]
+
+
+def test_a_github_verdict_on_the_last_line_opens_no_section() -> None:
+    cleaned = clean_trace(f"2026-10-05T09:10:22.1000000Z {GITHUB_VERDICT}\n")
+    assert cleaned.sections == []
+    assert cleaned.failure_reason == GITHUB_VERDICT
+
+
+def test_gitlab_traces_have_no_post_job_section(any_trace: tuple[str, str]) -> None:
+    _name, raw = any_trace
+    cleaned = clean_trace(raw)
+    assert all(line.section != POST_JOB_SECTION for line in cleaned.lines)
+    assert all(section.name != POST_JOB_SECTION for section in cleaned.sections)

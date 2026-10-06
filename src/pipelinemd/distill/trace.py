@@ -35,6 +35,24 @@ _TIMESTAMP = re.compile(
     r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z(?: |$)(?:[0-9a-f]{2}[OE][+ ])?"
 )
 
+# GitHub Actions prints its verdict at the end of the failing step and then
+# keeps going: steps that run `if: failure()`, each action's post step, the
+# service containers' own logs, orphan-process cleanup. All of it happens
+# *because* the job already failed, like gitlab-runner's after_script, so it
+# is attributed to one section the rules engine discounts the same way. Postgres
+# printing "sh: locale: not found" while its container is torn down is not why
+# the tests failed.
+#
+# The section starts after the last verdict. A job that failed in an action
+# rather than a shell step prints no "Process completed" line; there it starts
+# at the first line GitHub prints only once the steps are over.
+POST_JOB_SECTION = "post_job"
+_GITHUB_VERDICT = re.compile(r"^##\[error\]Process completed with exit code \d+\.?$")
+_GITHUB_POST_JOB = re.compile(
+    r"^(?:Post job cleanup\.$|Print service container logs: |Stop and remove container: |"
+    r"Cleaning up orphan processes$)"
+)
+
 _RUNNER = re.compile(r"^Running with gitlab-runner\s+(.+?)\s*$")
 _RUNNER_ON = re.compile(r"^\s*on\s+(.+?)\s*$")
 _IMAGE = re.compile(
@@ -81,6 +99,15 @@ def _clip_raw(raw: str, limit: int = MAX_RAW_BYTES) -> tuple[str, bool]:
     tail = raw[-(limit - limit // 4) :]
     marker = "\n… [pipelinemd: trace exceeded size limit, middle discarded] …\n"
     return head + marker + tail, True
+
+
+def _post_job_start(texts: list[str]) -> int | None:
+    """The line GitHub's post-job phase starts on, or None for any other log."""
+    verdicts = [n for n, text in enumerate(texts, start=1) if _GITHUB_VERDICT.match(text)]
+    if verdicts:
+        after = verdicts[-1] + 1
+        return after if any(text.strip() for text in texts[after - 1 :]) else None
+    return next((n for n, text in enumerate(texts, start=1) if _GITHUB_POST_JOB.match(text)), None)
 
 
 def clean_trace(raw: str) -> CleanedTrace:
@@ -151,6 +178,14 @@ def clean_trace(raw: str) -> CleanedTrace:
     # anything else reads the text.
     cleaned_texts = redact_lines(cleaned_texts)
 
+    post_job_start = _post_job_start(cleaned_texts)
+    if post_job_start is not None:
+        for index in range(post_job_start - 1, len(metadata)):
+            metadata[index] = (metadata[index][0], POST_JOB_SECTION)
+        sections.append(
+            Section(name=POST_JOB_SECTION, start_line=post_job_start, end_line=len(cleaned_texts))
+        )
+
     for index, (text, (raw_number, section)) in enumerate(
         zip(cleaned_texts, metadata, strict=True), start=1
     ):
@@ -170,7 +205,11 @@ def clean_trace(raw: str) -> CleanedTrace:
         if image is None and (image_match := _IMAGE.search(text)):
             image = image_match.group(1).rstrip(".")
 
-        if _JOB_FAILED.match(text):
+        # What GitHub prints after its verdict is not the job's: a service
+        # container's log can mention an exit code of its own.
+        if section == POST_JOB_SECTION:
+            continue
+        if _JOB_FAILED.match(text) or _GITHUB_VERDICT.match(text):
             failure_reason = text
         if exit_match := _EXIT_CODE.search(text):
             exit_code = int(exit_match.group(1))

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import re
 
+from ..distill.trace import POST_JOB_SECTION
 from ..models import DistilledLog, EvidenceLine
 
 # Runner chatter that always trails a job. It is never the verdict, so it must
@@ -36,9 +37,17 @@ TIER_CONTEXT = 0
 
 
 def _tiers(lines: list[EvidenceLine]) -> list[int]:
-    anchors = [index for index, line in enumerate(lines) if line.is_anchor]
+    # What GitHub runs after its verdict is fallout. It can still be shown, but
+    # only with room to spare: it neither holds a verdict slot nor ranks as an
+    # anchor, so a service container's log never pushes the failure off screen.
+    post_job = {index for index, line in enumerate(lines) if line.section == POST_JOB_SECTION}
+    anchors = [
+        index for index, line in enumerate(lines) if line.is_anchor and index not in post_job
+    ]
     verdict: set[int] = set()
     for index in range(len(lines) - 1, -1, -1):
+        if index in post_job:
+            continue
         text = lines[index].text.strip()
         if text and not _BOILERPLATE.match(text):
             verdict.add(index)
@@ -49,7 +58,7 @@ def _tiers(lines: list[EvidenceLine]) -> list[int]:
     for index, line in enumerate(lines):
         if index in verdict:
             tiers.append(TIER_VERDICT)
-        elif not line.text.strip():
+        elif not line.text.strip() or index in post_job:
             # A blank line is never worth a slot that a content line could use.
             tiers.append(TIER_CONTEXT)
         elif line.is_anchor:
