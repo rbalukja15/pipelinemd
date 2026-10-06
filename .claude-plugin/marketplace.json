@@ -1,0 +1,19 @@
+{
+  "name": "pipelinemd",
+  "owner": {
+    "name": "rbalukja15",
+    "url": "https://github.com/rbalukja15"
+  },
+  "metadata": {
+    "description": "Diagnose failed CI jobs from Claude Code with pipelinemd."
+  },
+  "plugins": [
+    {
+      "name": "pipelinemd",
+      "source": "./plugins/pipelinemd",
+      "description": "Find out why a GitLab CI job or CI log failed: distils the log, matches known failure signatures, and hands the evidence to Claude to explain and fix.",
+      "category": "development",
+      "keywords": ["ci", "gitlab", "github-actions", "pipeline", "logs", "debugging"]
+    }
+  ]
+}

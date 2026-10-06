@@ -1,0 +1,12 @@
+{
+  "name": "pipelinemd",
+  "description": "Find out why a GitLab CI job or CI log failed: distils the log, matches known failure signatures, and hands the evidence to Claude to explain and fix.",
+  "author": {
+    "name": "rbalukja15",
+    "url": "https://github.com/rbalukja15"
+  },
+  "homepage": "https://github.com/rbalukja15/pipelinemd",
+  "repository": "https://github.com/rbalukja15/pipelinemd",
+  "license": "MIT",
+  "keywords": ["ci", "gitlab", "github-actions", "pipeline", "logs", "debugging"]
+}
