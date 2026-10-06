@@ -265,7 +265,10 @@ A failed Claude call is **not** fatal: pipelinemd warns on stderr and reports
 the deterministic findings anyway.
 
 For how the pieces fit together, see [docs/architecture.md](https://github.com/rbalukja15/pipelinemd/blob/main/docs/architecture.md);
-for how a version reaches PyPI and the image, [docs/releasing.md](https://github.com/rbalukja15/pipelinemd/blob/main/docs/releasing.md).
+for why they are built this way, the decision records starting with
+[ADR-0001](https://github.com/rbalukja15/pipelinemd/blob/main/docs/adr/0001-stack-and-scope.md);
+for how a version reaches PyPI and the image, [docs/releasing.md](https://github.com/rbalukja15/pipelinemd/blob/main/docs/releasing.md);
+and for how the project got here, the [devlog](https://github.com/rbalukja15/pipelinemd/blob/main/docs/devlog.md).
 
 ## Design notes
 

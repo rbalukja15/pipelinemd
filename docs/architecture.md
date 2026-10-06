@@ -4,6 +4,10 @@ pipelinemd is a pipeline of pure stages with one impure edge at each end:
 fetching a trace at the front, optionally asking a model at the back.
 Everything between is deterministic and independently testable.
 
+Why it is split this way, and what that costs, is recorded in
+[ADR-0001](adr/0001-stack-and-scope.md); later decisions are indexed in
+[`adr/`](adr/README.md).
+
 ```
 GitLab API ─┐
             ├─► raw trace ─► clean ─► score ─► window ─► evidence ─┬─► rules ──┬─► render
