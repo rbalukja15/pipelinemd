@@ -10,10 +10,12 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import struct
 from pathlib import Path
 
 import pytest
 
+import pipelinemd
 from pipelinemd.cli import build_parser
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -61,6 +63,25 @@ def test_marketplace_points_at_a_plugin() -> None:
 
     assert marketplace["plugins"][0]["name"] == plugin["name"] == "pipelinemd"
     assert _plugin_dir().is_relative_to(ROOT)
+
+
+def test_plugin_version_matches_the_package() -> None:
+    # Claude Code offers installed plugins an update only when this changes.
+    plugin = json.loads(
+        (_plugin_dir() / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8")
+    )
+
+    assert plugin["version"] == pipelinemd.__version__
+
+
+def test_plugin_icon_fits_the_directory() -> None:
+    # The plugin directory wants a square PNG, 512 to 2048 px a side, under 2 MB.
+    icon = (_plugin_dir() / ".claude-plugin" / "icon.png").read_bytes()
+    width, height = struct.unpack(">II", icon[16:24])
+
+    assert icon.startswith(b"\x89PNG\r\n\x1a\n")
+    assert width == height and 512 <= width <= 2048
+    assert len(icon) < 2 * 1024 * 1024
 
 
 def test_skill_frontmatter() -> None:
