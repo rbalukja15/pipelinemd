@@ -190,6 +190,26 @@ diagnose:
 
 A ready-made job is in [`examples/gitlab-ci-diagnose.yml`](https://github.com/rbalukja15/pipelinemd/blob/main/examples/gitlab-ci-diagnose.yml).
 
+### In Claude Code
+
+The repository is also a Claude Code plugin marketplace. Install the plugin
+once, from inside Claude Code:
+
+```
+/plugin marketplace add rbalukja15/pipelinemd
+/plugin install pipelinemd@pipelinemd
+```
+
+Then paste a failed job URL, or point at a log, and ask why it failed. The
+`pipelinemd` skill runs `uvx pipelinemd diagnose <url> --no-llm` (or `distill`
+on a log file, such as one saved with `gh run view --log-failed`), and Claude
+works from the distilled evidence and matched rules rather than the whole log,
+then fixes the cause in your repository. The rules-only run needs no API key;
+set `GITLAB_TOKEN` for private projects. It needs [uv](https://docs.astral.sh/uv/);
+the skill falls back to an installed `pipelinemd`, `pipx` or the image.
+
+The skill lives in [`plugins/pipelinemd/`](https://github.com/rbalukja15/pipelinemd/tree/main/plugins/pipelinemd).
+
 ## Output formats
 
 | `--format` | For |

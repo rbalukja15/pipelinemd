@@ -8,6 +8,13 @@ How a section becomes a release is in [docs/releasing.md](docs/releasing.md).
 
 ## [Unreleased]
 
+### Added
+
+- A Claude Code plugin, installable from this repository, with a skill that
+  runs pipelinemd on a failed GitLab job URL or a downloaded CI log and works
+  from its report instead of the raw log. It runs the rules only, so it needs
+  no Anthropic API key.
+
 ## [0.1.1] - 2026-10-06
 
 ### Fixed
