@@ -8,6 +8,8 @@ How a section becomes a release is in [docs/releasing.md](docs/releasing.md).
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-10-06
+
 ### Added
 
 - A Claude Code plugin, installable from this repository, with a skill that
@@ -86,6 +88,7 @@ The first release.
   GitLab CI job can diagnose a failed pipeline without a pip install, and a
   release workflow that publishes it and the PyPI package as one version.
 
-[Unreleased]: https://github.com/rbalukja15/pipelinemd/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/rbalukja15/pipelinemd/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/rbalukja15/pipelinemd/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/rbalukja15/pipelinemd/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/rbalukja15/pipelinemd/releases/tag/v0.1.0
