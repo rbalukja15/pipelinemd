@@ -8,7 +8,7 @@ How a section becomes a release is in [docs/releasing.md](docs/releasing.md).
 
 ## [Unreleased]
 
-## [0.1.0] - YYYY-MM-DD
+## [0.1.0] - 2026-10-06
 
 The first release.
 
