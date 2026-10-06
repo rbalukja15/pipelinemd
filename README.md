@@ -63,6 +63,10 @@ Rule matches
 Evidence   9 of 41,284 lines · 100.0% reduced
 ```
 
+**See it without installing anything:** the [demo](https://rbalukja15.github.io/pipelinemd/)
+has five failed jobs and the HTML report pipelinemd wrote for each, rebuilt
+from main on every merge. `make demo` builds the same pages locally.
+
 ---
 
 ## Install
