@@ -181,11 +181,20 @@ diagnose:
     entrypoint: [""]
   when: on_failure
   script:
-    - pipelinemd diagnose --format markdown -o diagnosis.md
+    - pipelinemd diagnose -o diagnosis.html -o diagnosis.md
   artifacts:
     when: always
-    paths: [diagnosis.md]
+    expose_as: pipelinemd diagnosis
+    paths: [diagnosis.html, diagnosis.md]
 ```
+
+One analysis writes both files: with several `-o`, each file's format comes
+from its extension, so the model is asked once. `diagnosis.html` is a single
+self-contained page, so it has a stable URL as a job artifact
+(`<project>/-/jobs/<job id>/artifacts/file/diagnosis.html`), and `expose_as`
+links it from the merge request. GitLab opens HTML artifacts in the browser on
+gitlab.com and on instances with GitLab Pages enabled; elsewhere it downloads,
+and opens just the same from disk.
 
 Nothing is installed when the job runs, so a failure is diagnosed even while
 PyPI is slow or unreachable. The `entrypoint: [""]` matters: the image's
@@ -204,10 +213,11 @@ diagnose:
   when: on_failure
   script:
     - pip install 'pipelinemd[llm]'
-    - pipelinemd diagnose --format markdown -o diagnosis.md
+    - pipelinemd diagnose -o diagnosis.html -o diagnosis.md
   artifacts:
     when: always
-    paths: [diagnosis.md]
+    expose_as: pipelinemd diagnosis
+    paths: [diagnosis.html, diagnosis.md]
 ```
 
 A ready-made job is in [`examples/gitlab-ci-diagnose.yml`](https://github.com/rbalukja15/pipelinemd/blob/main/examples/gitlab-ci-diagnose.yml).
@@ -238,7 +248,13 @@ The skill lives in [`plugins/pipelinemd/`](https://github.com/rbalukja15/pipelin
 | --- | --- |
 | `terminal` (default) | Reading it yourself. Colour honours `NO_COLOR` and non-TTY output. |
 | `markdown` | Pasting into a merge request or issue. Collapsible evidence. |
+| `html` | A job artifact, or a file to open or attach. One self-contained page with no external assets, scripts or network access; follows light and dark mode and prints cleanly. `--all-jobs` puts every report on one page with the run's total. Shows the whole excerpt unless `--evidence-limit` says otherwise. |
 | `json` | Other tooling. Versioned via `schema_version`. One job is one report object; several (`--all-jobs`) are `{"reports": [...], "cost": {...}}`, with the run's total cost beside them. |
+
+`-o` given once writes `--format` to that file. Given several times, it writes
+one analysis in several formats, each chosen by the file's extension (`.txt`,
+`.md`, `.json`, `.html`), so a diagnosis is paid for once however many files it
+lands in.
 
 ## How the distiller works
 

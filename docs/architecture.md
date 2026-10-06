@@ -36,7 +36,7 @@ local file ─┘                                                     │       
 | `diagnose/prompt.py` | Build the request. Owns the JSON schema. |
 | `diagnose/citations.py` | Resolve the line numbers a diagnosis cited back to real evidence lines. |
 | `diagnose/claude.py` | Make the call. Never fatal. |
-| `render/*` | Terminal, markdown, JSON. |
+| `render/*` | Terminal, markdown, JSON, and a self-contained HTML page. |
 | `cli.py` | Argument parsing, orchestration, exit codes. |
 
 ## Why the distiller is pure

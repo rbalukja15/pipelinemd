@@ -36,6 +36,7 @@ from .models import JobRef, Report, RetryHistory
 from .render import (
     ColorChoice,
     make_style,
+    render_html,
     render_markdown,
     render_markdown_run_total,
     render_run_total,
@@ -52,6 +53,21 @@ EXIT_NOTHING = 4
 EXIT_BELOW_THRESHOLD = 5
 
 MAX_JOBS_DEFAULT = 1
+
+FORMATS = ("terminal", "markdown", "json", "html")
+#: What a file written by one of several `-o` gets, by extension.
+FORMAT_BY_SUFFIX = {
+    ".txt": "terminal",
+    ".log": "terminal",
+    ".md": "markdown",
+    ".markdown": "markdown",
+    ".json": "json",
+    ".html": "html",
+    ".htm": "html",
+}
+#: Evidence lines a screen-sized report shows. An HTML page is not screen
+#: sized, so it shows the whole excerpt unless told otherwise.
+EVIDENCE_LIMIT_DEFAULT = 40
 
 
 # ---------------------------------------------------------------------------
@@ -71,7 +87,7 @@ def build_parser() -> argparse.ArgumentParser:
         sub.add_argument(
             "-f",
             "--format",
-            choices=("terminal", "markdown", "json"),
+            choices=FORMATS,
             default="terminal",
             help="Output format (default: terminal).",
         )
@@ -82,13 +98,24 @@ def build_parser() -> argparse.ArgumentParser:
             help="Colourise terminal output (default: auto).",
         )
         sub.add_argument(
-            "-o", "--output", metavar="PATH", help="Write to a file instead of stdout."
+            "-o",
+            "--output",
+            metavar="PATH",
+            action="append",
+            help=(
+                "Write to a file instead of stdout. Repeat it to write several formats "
+                "from one analysis; each file's format then comes from its extension "
+                "(.txt, .md, .json, .html)."
+            ),
         )
         sub.add_argument(
             "--evidence-limit",
             type=int,
-            default=40,
-            help="Evidence lines to display (default: 40).",
+            default=None,
+            help=(
+                f"Evidence lines to display (default: {EVIDENCE_LIMIT_DEFAULT}; "
+                "html shows them all)."
+            ),
         )
         sub.add_argument("--all-rules", action="store_true", help="Show every rule that matched.")
 
@@ -272,43 +299,81 @@ def _read_trace(path: str, stdin: IO[str]) -> str:
     return source.read_text(encoding="utf-8", errors="replace")
 
 
+def _outputs(args: argparse.Namespace) -> list[tuple[str | None, str]]:
+    """Where to write, and in which format: stdout, one file, or several.
+
+    One `-o` keeps `--format`, as it always has. Several need a format each,
+    and the only per-file signal is the extension, so an unknown one is a
+    usage error rather than a guess.
+    """
+    paths: list[str] = args.output or []
+    if len(paths) <= 1:
+        return [(paths[0] if paths else None, args.format)]
+    outputs: list[tuple[str | None, str]] = []
+    for path in paths:
+        fmt = FORMAT_BY_SUFFIX.get(Path(path).suffix.lower())
+        if fmt is None:
+            known = ", ".join(sorted(FORMAT_BY_SUFFIX))
+            raise UsageError(
+                f"With several -o, each file's format comes from its extension, and "
+                f"{path!r} has none pipelinemd knows ({known})."
+            )
+        outputs.append((path, fmt))
+    return outputs
+
+
+def _format(
+    reports: list[Report],
+    args: argparse.Namespace,
+    fmt: str,
+    destination: str | None,
+    stdout: IO[str],
+) -> str:
+    rule_limit = 999 if args.all_rules else 5
+    evidence_limit = args.evidence_limit
+    if evidence_limit is None:
+        evidence_limit = 0 if fmt == "html" else EVIDENCE_LIMIT_DEFAULT
+    # Several reports get the run's cost beside them, so nobody has to add up
+    # per-report figures - see run_to_dict for why that sum goes wrong.
+    several = len(reports) != 1
+    if fmt == "json":
+        payload: Any = run_to_dict(reports) if several else report_to_dict(reports[0])
+        return json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
+    if fmt == "html":
+        return render_html(reports, rule_limit=rule_limit, evidence_limit=evidence_limit)
+    if fmt == "markdown":
+        sections = [
+            render_markdown(report, rule_limit=rule_limit, evidence_limit=evidence_limit)
+            for report in reports
+        ]
+        if several:
+            sections.append(render_markdown_run_total(reports))
+        return "\n---\n\n".join(sections)
+    # Writing to a file: "auto" must mean no colour. Deciding from
+    # sys.stdout's tty-ness would embed escape codes in the file.
+    choice: ColorChoice = "never" if (destination and args.color == "auto") else args.color
+    style = make_style(choice, stdout)
+    text = "\n".join(
+        render_terminal(
+            report,
+            style,
+            rule_limit=rule_limit,
+            evidence_limit=evidence_limit,
+        )
+        for report in reports
+    )
+    if several:
+        text += "\n" + render_run_total(reports, style)
+    return text
+
+
 def _render(
     reports: list[Report],
     args: argparse.Namespace,
     stdout: IO[str],
 ) -> None:
-    rule_limit = 999 if args.all_rules else 5
-    # Several reports get the run's cost beside them, so nobody has to add up
-    # per-report figures - see run_to_dict for why that sum goes wrong.
-    several = len(reports) != 1
-    if args.format == "json":
-        payload: Any = run_to_dict(reports) if several else report_to_dict(reports[0])
-        text = json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
-    elif args.format == "markdown":
-        sections = [
-            render_markdown(report, rule_limit=rule_limit, evidence_limit=args.evidence_limit)
-            for report in reports
-        ]
-        if several:
-            sections.append(render_markdown_run_total(reports))
-        text = "\n---\n\n".join(sections)
-    else:
-        # Writing to a file: "auto" must mean no colour. Deciding from
-        # sys.stdout's tty-ness would embed escape codes in the file.
-        choice: ColorChoice = "never" if (args.output and args.color == "auto") else args.color
-        style = make_style(choice, stdout)
-        text = "\n".join(
-            render_terminal(
-                report,
-                style,
-                rule_limit=rule_limit,
-                evidence_limit=args.evidence_limit,
-            )
-            for report in reports
-        )
-        if several:
-            text += "\n" + render_run_total(reports, style)
-    _write(text, args.output, stdout)
+    for destination, fmt in _outputs(args):
+        _write(_format(reports, args, fmt, destination, stdout), destination, stdout)
 
 
 def _resolve_target(args: argparse.Namespace) -> Target:
@@ -413,6 +478,7 @@ def _retry_history(
 
 
 def cmd_distill(args: argparse.Namespace, stdout: IO[str], stderr: IO[str], stdin: IO[str]) -> int:
+    _outputs(args)  # a bad -o fails before any work, not after it
     raw = _read_trace(args.path, stdin)
     distilled = distill(
         raw,
@@ -431,6 +497,8 @@ def cmd_distill(args: argparse.Namespace, stdout: IO[str], stderr: IO[str], stdi
 
 
 def cmd_diagnose(args: argparse.Namespace, stdout: IO[str], stderr: IO[str], stdin: IO[str]) -> int:
+    # A bad -o fails here, before a fetch or a billed model call, not after.
+    _outputs(args)
     # Offline path: a trace already on disk.
     if args.from_file:
         raw = _read_trace(args.from_file, stdin)
