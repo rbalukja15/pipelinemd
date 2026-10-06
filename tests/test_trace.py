@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from pipelinemd.distill import distill
 from pipelinemd.distill.trace import MAX_LINE_CHARS, clean_trace
+from pipelinemd.rules.engine import match_rules
 
 from .fixtures.secrets import GITLAB_PAT_PLAIN
 
@@ -64,6 +66,93 @@ def test_runner_timestamps_are_stripped() -> None:
     raw = "2026-08-26T09:12:44.101010Z 00O $ npm ci\n2026-08-26T09:12:45.000000Z 00O done\n"
     cleaned = clean_trace(raw)
     assert [line.text for line in cleaned.lines[:2]] == ["$ npm ci", "done"]
+
+
+def test_every_runner_stream_descriptor_is_stripped() -> None:
+    raw = (
+        "2026-08-26T09:12:44.101010Z 00O $ npm ci\n"
+        "2026-08-26T09:12:45.000000Z 01E npm warn deprecated\n"
+        "2026-08-26T09:12:45.500000Z 00O+continued output\n"
+        "2021-01-01T04:00:00.020010Z ffE+Done.\r\n"
+        "2021-01-01T04:00:00.020010Z ffE+\n"
+        "2026-08-26T09:12:46.000000Z 00O   indented output\n"
+    )
+    cleaned = clean_trace(raw)
+    assert [line.text for line in cleaned.lines[:6]] == [
+        "$ npm ci",
+        "npm warn deprecated",
+        "continued output",
+        "Done.",
+        "",
+        "  indented output",
+    ]
+
+
+def test_section_marker_on_a_continuation_line_is_parsed() -> None:
+    # The runner writes a section marker with no newline of its own, so the
+    # text after it arrives on a continuation line ("00O+").
+    raw = (
+        "2026-08-26T09:12:44.000000Z 01O section_start:100:foo\r\x1b[0K\n"
+        "2026-08-26T09:12:45.000000Z 01O+inside\n"
+        "2026-08-26T09:12:46.000000Z 01O+section_end:123:foo\r\x1b[0K\n"
+        "2026-08-26T09:12:46.000000Z 01O+after\n"
+    )
+    cleaned = clean_trace(raw)
+    assert [line.text for line in cleaned.lines[:4]] == ["", "inside", "", "after"]
+    assert [(s.name, s.start_line, s.end_line) for s in cleaned.sections] == [("foo", 1, 3)]
+    assert cleaned.lines[1].section == "foo"
+    assert cleaned.lines[3].section is None
+
+
+def test_short_first_word_after_a_runner_descriptor_survives() -> None:
+    raw = "2026-08-26T09:12:44.101010Z 00O Run tests\n"
+    cleaned = clean_trace(raw)
+    assert cleaned.lines[0].text == "Run tests"
+
+
+def test_timestamp_without_descriptor_keeps_every_word() -> None:
+    """GitHub Actions stamps lines with the time alone (#49)."""
+    words = [
+        "Post job cleanup.",
+        "Run actions/checkout@v4",
+        "with node-version: 20",
+        "LTS release",
+        "2024 was the cutoff",
+        "  node-version: 20",
+        " * [new ref]         main -> main",
+    ]
+    raw = "".join(f"2026-10-06T09:51:58.7516961Z {text}\n" for text in words)
+    cleaned = clean_trace(raw)
+    assert [line.text for line in cleaned.lines[: len(words)]] == words
+
+
+def test_indentation_after_a_bare_timestamp_is_kept_so_column_rules_do_not_fire() -> None:
+    # Vitest indents its FAIL lines; losing that space would let the Go rule
+    # anchored at column 0 claim a TypeScript failure.
+    raw = "2026-10-06T09:51:58.7516961Z  FAIL  src/cart.test.ts > applies the discount\n"
+    cleaned = clean_trace(raw)
+    assert cleaned.lines[0].text == " FAIL  src/cart.test.ts > applies the discount"
+    assert "test.go-failed" not in {hit.rule.id for hit in match_rules(distill(raw))}
+
+
+def test_byte_order_mark_does_not_keep_the_first_timestamp() -> None:
+    """GitHub's job logs begin with a UTF-8 byte order mark."""
+    raw = (
+        "\ufeff2026-10-06T08:43:30.0997190Z Current runner version: '2.337.0'\n"
+        "2026-10-06T08:43:49.3916783Z Post job cleanup.\n"
+    )
+    cleaned = clean_trace(raw)
+    assert [line.text for line in cleaned.lines[:2]] == [
+        "Current runner version: '2.337.0'",
+        "Post job cleanup.",
+    ]
+
+
+def test_timestamp_only_lines_keep_their_text_through_distill() -> None:
+    raw = "2026-10-06T09:51:58.7516961Z Post job cleanup.\n"
+    result = distill(raw)
+    assert result.clean_text().splitlines()[0] == "Post job cleanup."
+    assert result.evidence_text().endswith("Post job cleanup.")
 
 
 def test_metadata_is_extracted() -> None:

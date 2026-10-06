@@ -8,6 +8,16 @@ How a section becomes a release is in [docs/releasing.md](docs/releasing.md).
 
 ## [Unreleased]
 
+### Fixed
+
+- Stripping runner timestamps no longer deletes a short first word (`Post`,
+  `Run`, `with`) or the indentation from lines stamped with the time alone, as
+  GitHub Actions logs are, and the byte order mark those logs start with no
+  longer keeps the first line's timestamp. Only GitLab's own stream descriptor
+  goes with the timestamp, including the `+` form on continuation lines
+  (`00O+text`), so section markers on those lines are now read too
+  ([#49](https://github.com/rbalukja15/pipelinemd/issues/49)).
+
 ## [0.1.0] - 2026-10-06
 
 The first release.
