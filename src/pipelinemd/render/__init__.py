@@ -1,6 +1,7 @@
-"""Output formats: terminal, markdown, JSON."""
+"""Output formats: terminal, markdown, JSON, HTML."""
 
 from .evidence import select_display_lines
+from .html import render_html
 from .json_out import SCHEMA_VERSION, render_json, report_to_dict, run_to_dict
 from .markdown import render_markdown, render_markdown_run_total
 from .style import ColorChoice, Style, make_style
@@ -11,6 +12,7 @@ __all__ = [
     "ColorChoice",
     "Style",
     "make_style",
+    "render_html",
     "render_json",
     "render_markdown",
     "render_markdown_run_total",
