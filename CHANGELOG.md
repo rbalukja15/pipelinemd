@@ -17,6 +17,17 @@ How a section becomes a release is in [docs/releasing.md](docs/releasing.md).
   still match on their own lines. Found by running pipelinemd on its own early
   CI failures ([#23](https://github.com/rbalukja15/pipelinemd/issues/23)).
 
+### Security
+
+- A GitLab token from the environment (`$GITLAB_TOKEN` and the others) is now
+  only sent to the instance it belongs to: `$PIPELINEMD_GITLAB_URL`,
+  `$CI_SERVER_URL` inside a pipeline, or gitlab.com. A pasted URL on any other
+  host is fetched without it, and pipelinemd says the token was withheld.
+  Before, the token went to whatever host the URL named. For a self-managed
+  instance outside CI, set `PIPELINEMD_GITLAB_URL` or pass `--gitlab-url`; a
+  token given with `--token` is still sent where the command points
+  ([#6](https://github.com/rbalukja15/pipelinemd/issues/6)).
+
 ## [0.1.2] - 2026-10-06
 
 ### Added
