@@ -8,6 +8,21 @@ How a section becomes a release is in [docs/releasing.md](docs/releasing.md).
 
 ## [Unreleased]
 
+### Added
+
+- `pipelinemd eval --llm` (`make eval-llm`) scores the Claude diagnosis against
+  the corpus: its class accuracy beside the rules', whether its citations were
+  real, and whether it agreed with the top rule, per class, with the run's
+  cost. `--max-cost` stops the run before it would pass a cap ($5 by default),
+  and `--case` limits it to chosen cases. It is billed, so it never runs in
+  `make check` or on a push; a manual workflow runs it from the Actions tab
+  ([#46](https://github.com/rbalukja15/pipelinemd/issues/46)).
+
+### Changed
+
+- `pipelinemd eval -o` can be given twice to write the text and JSON results
+  of one run, each chosen by the file's extension.
+
 ## [0.2.0] - 2026-10-06
 
 ### Added

@@ -160,6 +160,13 @@ it kept the cause in the excerpt, and exposed a rule that was too broad, now fix
 `make gate` is the same run with CI's thresholds, and runs on every push — a
 catalog regression fails the build rather than being noticed later.
 
+The Claude diagnosis is scored separately, because that run needs a key and
+costs money: `make eval-llm` (or `pipelinemd eval --llm --max-cost 5`) asks the
+model about every case and reports its class accuracy beside the rules',
+whether its citations were real, and whether it agreed with the top rule, per
+class, with the run's cost. It stops at a spending cap and never gates
+anything.
+
 ### Browse the rule catalog
 
 ```bash

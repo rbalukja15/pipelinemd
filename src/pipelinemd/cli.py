@@ -3,6 +3,7 @@
 pipelinemd diagnose <url>      diagnose a failed pipeline or job
 pipelinemd distill <file>      distil a saved trace, offline
 pipelinemd rules               list the rule catalog
+pipelinemd eval                score the rules against the corpus (--llm: the model too)
 pipelinemd explain <rule-id>   show one rule in full
 """
 
@@ -24,6 +25,8 @@ from .config import (
     resolve_gitlab_url,
     scope_credentials,
 )
+from .corpus import load_corpus
+from .cost import format_usd, price_for
 from .diagnose import DEFAULT_MODEL
 from .diagnose import available as llm_available
 from .diagnose import diagnose as run_diagnosis
@@ -31,8 +34,9 @@ from .distill import distill
 from .distill.extract import DEFAULT_MAX_LINES, DEFAULT_TAIL_LINES, DEFAULT_THRESHOLD
 from .errors import DiagnosisError, GitLabError, PipelinemdError, UsageError
 from .evaluate import eval_report_to_dict, format_report, run_eval
+from .evaluate_llm import format_llm_report, llm_report_to_dict, run_llm_eval
 from .gitlab import GitLabClient, Target, parse_target, rebase, target_from_parts
-from .models import JobRef, Report, RetryHistory
+from .models import Diagnosis, DistilledLog, JobRef, Report, RetryHistory, RuleHit
 from .render import (
     ColorChoice,
     make_style,
@@ -239,7 +243,16 @@ def build_parser() -> argparse.ArgumentParser:
     eval_parser.add_argument(
         "-f", "--format", choices=("text", "json"), default="text", help="Output format."
     )
-    eval_parser.add_argument("-o", "--output", metavar="PATH", help="Write to a file.")
+    eval_parser.add_argument(
+        "-o",
+        "--output",
+        metavar="PATH",
+        action="append",
+        help=(
+            "Write to a file instead of stdout. Repeat it to write both formats from one "
+            "run, each chosen by the file's extension (.txt, .json)."
+        ),
+    )
     eval_parser.add_argument(
         "--min-rule-accuracy",
         type=float,
@@ -272,6 +285,38 @@ def build_parser() -> argparse.ArgumentParser:
             "Exit non-zero if more than N known-gap cases fire a rule. "
             "Gaps are excluded from every rate, so --min-rule-accuracy cannot see them."
         ),
+    )
+    llm_group = eval_parser.add_argument_group(
+        "diagnosis layer (--llm)",
+        "Also ask Claude to diagnose each case, and score its class, its citations and "
+        "its agreement with the top rule. Needs an API key and is billed; never part "
+        "of the gate.",
+    )
+    llm_group.add_argument(
+        "--llm", action="store_true", help="Score the Claude diagnosis too (billed)."
+    )
+    llm_group.add_argument(
+        "--max-cost",
+        type=float,
+        default=5.0,
+        metavar="USD",
+        help="Stop before the run's estimated spend would pass this (default: 5).",
+    )
+    llm_group.add_argument(
+        "--case",
+        action="append",
+        metavar="ID",
+        help="Only this corpus case; repeat for several. Handy for a cheap first run.",
+    )
+    llm_group.add_argument("--api-key", help="Anthropic API key (else $ANTHROPIC_API_KEY).")
+    llm_group.add_argument(
+        "--model", default=DEFAULT_MODEL, help=f"Model (default: {DEFAULT_MODEL})."
+    )
+    llm_group.add_argument(
+        "--effort",
+        choices=("low", "medium", "high", "xhigh", "max"),
+        default="high",
+        help="Reasoning effort (default: high).",
     )
     eval_parser.set_defaults(func=cmd_eval)
 
@@ -645,7 +690,32 @@ def cmd_rules(args: argparse.Namespace, stdout: IO[str], stderr: IO[str], stdin:
     return EXIT_OK
 
 
+EVAL_FORMAT_BY_SUFFIX = {".txt": "text", ".json": "json"}
+
+
+def _eval_outputs(args: argparse.Namespace) -> list[tuple[str | None, str]]:
+    """`_outputs` for eval, whose formats are text and json."""
+    paths: list[str] = args.output or []
+    if len(paths) <= 1:
+        return [(paths[0] if paths else None, args.format)]
+    outputs: list[tuple[str | None, str]] = []
+    for path in paths:
+        fmt = EVAL_FORMAT_BY_SUFFIX.get(Path(path).suffix.lower())
+        if fmt is None:
+            raise UsageError(
+                f"With several -o, each file's format comes from its extension, and "
+                f"{path!r} is neither .txt nor .json."
+            )
+        outputs.append((path, fmt))
+    return outputs
+
+
 def cmd_eval(args: argparse.Namespace, stdout: IO[str], stderr: IO[str], stdin: IO[str]) -> int:
+    outputs = _eval_outputs(args)  # a bad -o fails before the run, billed or not
+    if args.llm:
+        return _eval_llm(args, outputs, stdout, stderr)
+    if args.case:
+        raise UsageError("--case only applies with --llm; `eval` always scores every case.")
     # Validate the gates before doing the work: `--min-rule-accuracy 95`, from
     # someone reading it as a percentage, used to run the whole corpus and then
     # report "below the required 9500.0%", and `-1` silently always passed.
@@ -666,11 +736,12 @@ def cmd_eval(args: argparse.Namespace, stdout: IO[str], stderr: IO[str], stdin: 
 
     report = run_eval(Path(args.corpus) if args.corpus else None)
 
-    if args.format == "json":
-        text = json.dumps(eval_report_to_dict(report), indent=2, ensure_ascii=False) + "\n"
-    else:
-        text = format_report(report)
-    _write(text, args.output, stdout)
+    for destination, fmt in outputs:
+        if fmt == "json":
+            text = json.dumps(eval_report_to_dict(report), indent=2, ensure_ascii=False) + "\n"
+        else:
+            text = format_report(report)
+        _write(text, destination, stdout)
 
     # Report every breached gate, not just the first: one run should say
     # everything that is wrong.
@@ -699,6 +770,71 @@ def cmd_eval(args: argparse.Namespace, stdout: IO[str], stderr: IO[str], stdin: 
         )
         failed = True
     return EXIT_BELOW_THRESHOLD if failed else EXIT_OK
+
+
+def _eval_llm(
+    args: argparse.Namespace,
+    outputs: list[tuple[str | None, str]],
+    stdout: IO[str],
+    stderr: IO[str],
+) -> int:
+    """`eval --llm`: the billed run. Validated in full before the first call."""
+    gates = (
+        args.min_rule_accuracy,
+        args.min_class_accuracy,
+        args.min_evidence_rate,
+        args.max_gap_false_positives,
+    )
+    if any(gate is not None for gate in gates):
+        # The gate has to give the same answer on every run, and this does not.
+        raise UsageError("the --min-*/--max-gap-* gates do not apply with --llm; run them alone.")
+    if not args.max_cost > 0:
+        raise UsageError(f"--max-cost takes a positive amount in USD, not {args.max_cost:g}.")
+    if price_for(args.model) is None:
+        raise UsageError(
+            f"no price on file for {args.model}, so the cost cap cannot be enforced. "
+            "Pick a model listed in pipelinemd/cost.py."
+        )
+    if not llm_available():
+        raise UsageError("--llm needs the `anthropic` package: pip install 'pipelinemd[llm]'.")
+
+    cases = load_corpus(Path(args.corpus) if args.corpus else None)
+    if args.case:
+        known = {case.id for case in cases}
+        unknown = [name for name in args.case if name not in known]
+        if unknown:
+            raise UsageError(f"no corpus case named {', '.join(unknown)}.")
+        cases = [case for case in cases if case.id in args.case]
+
+    api_key = resolve_anthropic_key(args.api_key)
+
+    def diagnose_case(job: JobRef, distilled: DistilledLog, hits: list[RuleHit]) -> Diagnosis:
+        return run_diagnosis(
+            job, distilled, hits, api_key=api_key, model=args.model, effort=args.effort
+        )
+
+    stderr.write(
+        f"Diagnosing {len(cases)} case(s) with {args.model}, "
+        f"capped at {format_usd(args.max_cost)}.\n"
+    )
+    report = run_llm_eval(
+        cases,
+        diagnose_case,
+        model=args.model,
+        effort=args.effort,
+        max_usd=args.max_cost,
+        progress=lambda line: stderr.write(line + "\n"),
+    )
+    for destination, fmt in outputs:
+        if fmt == "json":
+            text = json.dumps(llm_report_to_dict(report), indent=2, ensure_ascii=False) + "\n"
+        else:
+            text = format_llm_report(report)
+        _write(text, destination, stdout)
+
+    if not report.answered:
+        raise DiagnosisError(report.stopped or "the model answered none of the cases.")
+    return EXIT_OK
 
 
 def cmd_explain(args: argparse.Namespace, stdout: IO[str], stderr: IO[str], stdin: IO[str]) -> int:

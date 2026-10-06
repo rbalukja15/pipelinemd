@@ -43,6 +43,11 @@ MIN_EVIDENCE_RATE ?= 1.0
 # answer where it used to stay silent is a regression worth failing over.
 MAX_GAP_FALSE_POSITIVES ?= 0
 
+# The spend cap for `make eval-llm`, in USD. That target asks Claude about every
+# corpus case, so it is billed, and it is never part of `check` or CI's default
+# path. The run stops before a call that could take it over this.
+MAX_LLM_COST ?= 5
+
 # The image `make image` builds and `make image-smoke` runs. PACKAGE_VERSION
 # is read from the same line hatch stamps the wheel with, so the smoke test
 # checks the image reports the version the package claims. Not plain VERSION:
@@ -61,6 +66,7 @@ help:
 	@echo "typecheck      mypy --strict"
 	@echo "test           pytest"
 	@echo "eval           score the deterministic pipeline against corpus/"
+	@echo "eval-llm       score the Claude diagnosis too (billed, needs a key, capped at \$$$(MAX_LLM_COST))"
 	@echo "gate           eval, failing below rule@1 $(MIN_RULE_ACCURACY), class $(MIN_CLASS_ACCURACY) or evidence $(MIN_EVIDENCE_RATE)"
 	@echo "check          lint + typecheck + test + gate, CI's test job"
 	@echo "dist           sdist + wheel into dist/, then twine check (needs build, twine)"
@@ -86,6 +92,9 @@ test:
 
 eval:
 	$(PYTHON) -m pipelinemd eval
+
+eval-llm:
+	$(PYTHON) -m pipelinemd eval --llm --max-cost $(MAX_LLM_COST)
 
 gate:
 	$(PYTHON) -m pipelinemd eval \
