@@ -444,7 +444,7 @@ NODE_RULES: tuple[Rule, ...] = (
         category=Category.DEPENDENCY,
         patterns=(
             r"ERESOLVE unable to resolve dependency tree",
-            r"npm ERR! code ERESOLVE",
+            r"npm (?:ERR!|error) code ERESOLVE",
             r"ERESOLVE could not resolve",
         ),
         confidence=Confidence.HIGH,
@@ -487,8 +487,8 @@ NODE_RULES: tuple[Rule, ...] = (
         title="Package not found in the registry",
         category=Category.DEPENDENCY,
         patterns=(
-            r"npm ERR! code E404",
-            r"npm ERR! 404 Not Found - GET",
+            r"npm (?:ERR!|error) code E404",
+            r"npm (?:ERR!|error) 404 Not Found - GET",
             r"404 Not Found - GET \S+",
         ),
         confidence=Confidence.HIGH,
@@ -509,10 +509,10 @@ NODE_RULES: tuple[Rule, ...] = (
         title="npm registry rejected the credentials",
         category=Category.AUTH,
         patterns=(
-            r"npm ERR! code E401",
-            r"npm ERR! code E403",
+            r"npm (?:ERR!|error) code E401",
+            r"npm (?:ERR!|error) code E403",
             r"Incorrect or missing password",
-            r"npm ERR! 401 Unauthorized",
+            r"npm (?:ERR!|error) 401 Unauthorized",
         ),
         confidence=Confidence.HIGH,
         explanation=(
@@ -530,7 +530,7 @@ NODE_RULES: tuple[Rule, ...] = (
         title="Node version does not satisfy the package's engines field",
         category=Category.DEPENDENCY,
         patterns=(
-            r"npm ERR! code EBADENGINE",
+            r"npm (?:ERR!|error) code EBADENGINE",
             r"Unsupported engine",
             r"engine \"node\" is incompatible",
         ),

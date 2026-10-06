@@ -1,0 +1,187 @@
+﻿2026-10-05T09:02:11.0041130Z Current runner version: '2.329.0'
+2026-10-05T09:02:11.0161450Z ##[group]Runner Image Provisioner
+2026-10-05T09:02:11.0360960Z Hosted Compute Agent
+2026-10-05T09:02:11.0639660Z Version: 20250912.392
+2026-10-05T09:02:11.0997550Z ##[endgroup]
+2026-10-05T09:02:11.1434630Z ##[group]Operating System
+2026-10-05T09:02:11.1950900Z Ubuntu
+2026-10-05T09:02:11.2546360Z 24.04.3
+2026-10-05T09:02:11.3221010Z LTS
+2026-10-05T09:02:11.3974850Z ##[endgroup]
+2026-10-05T09:02:11.4807880Z ##[group]GITHUB_TOKEN Permissions
+2026-10-05T09:02:11.5720100Z Contents: read
+2026-10-05T09:02:11.5811510Z Metadata: read
+2026-10-05T09:02:11.5982110Z ##[endgroup]
+2026-10-05T09:02:11.6231900Z Secret source: Actions
+2026-10-05T09:02:11.6560880Z Prepare workflow directory
+2026-10-05T09:02:11.6969050Z Prepare all required actions
+2026-10-05T09:02:11.7456410Z Getting action download info
+2026-10-05T09:02:11.8022960Z Download action repository 'actions/checkout@v4' (SHA:08eba0b27e820071cde6df949e0beb9ba4906955)
+2026-10-05T09:02:11.8668700Z ##[group]Checking docker version
+2026-10-05T09:02:11.9393630Z ##[command]/usr/bin/docker version --format '{{.Server.APIVersion}}'
+2026-10-05T09:02:12.0197750Z '1.48'
+2026-10-05T09:02:12.1081060Z ##[endgroup]
+2026-10-05T09:02:12.1143560Z ##[group]Starting postgres service container
+2026-10-05T09:02:12.1285250Z ##[command]/usr/bin/docker pull postgres:16-alpine
+2026-10-05T09:02:12.1506130Z 16-alpine: Pulling from library/postgres
+2026-10-05T09:02:12.1806200Z Digest: sha256:5f2b6c1a9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3b2c1d0e9f8a7b6c5d4e3f2a
+2026-10-05T09:02:12.2185460Z Status: Downloaded newer image for postgres:16-alpine
+2026-10-05T09:02:12.2643910Z ##[command]/usr/bin/docker start 7c2e4f1a9b8d
+2026-10-05T09:02:12.3181550Z ##[endgroup]
+2026-10-05T09:02:12.3798380Z ##[group]Waiting for all services to be ready
+2026-10-05T09:02:12.4494400Z ##[command]/usr/bin/docker inspect --format="{{if .Config.Healthcheck}}{{print .State.Health.Status}}{{end}}" 7c2e4f1a9b8d
+2026-10-05T09:02:12.5269610Z healthy
+2026-10-05T09:02:12.6124010Z postgres service is healthy.
+2026-10-05T09:02:12.7057600Z ##[endgroup]
+2026-10-05T09:02:12.7170380Z ##[group]Run actions/checkout@v4
+2026-10-05T09:02:12.7362350Z with:
+2026-10-05T09:02:12.7633510Z   repository: example/shop
+2026-10-05T09:02:12.7983860Z   ref: refs/heads/main
+2026-10-05T09:02:12.8413400Z ##[endgroup]
+2026-10-05T09:02:12.8922130Z Syncing repository: example/shop
+2026-10-05T09:02:12.9510050Z ##[group]Getting Git version info
+2026-10-05T09:02:13.0177160Z Working directory is '/home/runner/work/shop/shop'
+2026-10-05T09:02:13.0923460Z [command]/usr/bin/git version
+2026-10-05T09:02:13.1748950Z git version 2.51.0
+2026-10-05T09:02:13.2653630Z ##[endgroup]
+2026-10-05T09:02:13.2737500Z ##[group]Fetching the repository
+2026-10-05T09:02:13.2900560Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +3f1c2a9d0b8e7f6a5c4d3e2f1a0b9c8d7e6f5a4b:refs/remotes/origin/main
+2026-10-05T09:02:13.3142810Z  * [new ref]         3f1c2a9d0b8e7f6a5c4d3e2f1a0b9c8d7e6f5a4b -> origin/main
+2026-10-05T09:02:13.3464250Z ##[endgroup]
+2026-10-05T09:02:13.3864880Z ##[group]Checking out the ref
+2026-10-05T09:02:13.4344700Z [command]/usr/bin/git checkout --progress --force -B main refs/remotes/origin/main
+2026-10-05T09:02:13.4903710Z Switched to a new branch 'main'
+2026-10-05T09:02:13.5541910Z ##[endgroup]
+2026-10-05T09:02:13.6259300Z ##[group]Run actions/setup-python@v5
+2026-10-05T09:02:13.7055880Z with:
+2026-10-05T09:02:13.7931650Z   python-version: 3.12
+2026-10-05T09:02:13.7986610Z ##[endgroup]
+2026-10-05T09:02:13.8120760Z Successfully set up CPython (3.12.11)
+2026-10-05T09:02:13.8334100Z ##[group]Run pip install -r requirements.txt
+2026-10-05T09:02:13.8626630Z pip install -r requirements.txt
+2026-10-05T09:02:13.8998350Z shell: /usr/bin/bash -e {0}
+2026-10-05T09:02:13.9449260Z ##[endgroup]
+2026-10-05T09:02:13.9979360Z Collecting package-0==1.0.0
+2026-10-05T09:02:14.0588650Z Collecting package-1==1.1.0
+2026-10-05T09:02:14.1277130Z Collecting package-2==1.2.0
+2026-10-05T09:02:14.2044800Z Collecting package-3==1.3.0
+2026-10-05T09:02:14.2891660Z Collecting package-4==1.4.0
+2026-10-05T09:02:14.3817710Z Collecting package-5==1.5.0
+2026-10-05T09:02:14.3922950Z Collecting package-6==1.6.0
+2026-10-05T09:02:14.4107380Z Collecting package-7==1.7.0
+2026-10-05T09:02:14.4371000Z Collecting package-8==1.8.0
+2026-10-05T09:02:14.4713810Z Collecting package-9==1.9.0
+2026-10-05T09:02:14.5135810Z Collecting package-10==1.10.0
+2026-10-05T09:02:14.5637000Z Collecting package-11==1.11.0
+2026-10-05T09:02:14.6217380Z Collecting package-12==1.12.0
+2026-10-05T09:02:14.6876950Z Collecting package-13==1.13.0
+2026-10-05T09:02:14.7615710Z Collecting package-14==1.14.0
+2026-10-05T09:02:14.8433660Z Collecting package-15==1.15.0
+2026-10-05T09:02:14.9330800Z Collecting package-16==1.16.0
+2026-10-05T09:02:14.9407130Z Collecting package-17==1.17.0
+2026-10-05T09:02:14.9562650Z Collecting package-18==1.18.0
+2026-10-05T09:02:14.9797360Z Collecting package-19==1.19.0
+2026-10-05T09:02:15.0111260Z Collecting package-20==1.20.0
+2026-10-05T09:02:15.0504350Z Collecting package-21==1.21.0
+2026-10-05T09:02:15.0976630Z Collecting package-22==1.22.0
+2026-10-05T09:02:15.1528100Z Collecting package-23==1.23.0
+2026-10-05T09:02:15.2158760Z Collecting package-24==1.24.0
+2026-10-05T09:02:15.2868610Z Collecting package-25==1.25.0
+2026-10-05T09:02:15.3657650Z Collecting package-26==1.26.0
+2026-10-05T09:02:15.4525880Z Collecting package-27==1.27.0
+2026-10-05T09:02:15.4573300Z Collecting package-28==1.28.0
+2026-10-05T09:02:15.4699910Z Collecting package-29==1.29.0
+2026-10-05T09:02:15.4905710Z Collecting package-30==1.30.0
+2026-10-05T09:02:15.5190700Z Collecting package-31==1.31.0
+2026-10-05T09:02:15.5554880Z Collecting package-32==1.32.0
+2026-10-05T09:02:15.5998250Z Collecting package-33==1.33.0
+2026-10-05T09:02:15.6520810Z Collecting package-34==1.34.0
+2026-10-05T09:02:15.7122560Z Collecting package-35==1.35.0
+2026-10-05T09:02:15.7803500Z Collecting package-36==1.36.0
+2026-10-05T09:02:15.8563630Z Collecting package-37==1.37.0
+2026-10-05T09:02:15.9402950Z Collecting package-38==1.38.0
+2026-10-05T09:02:16.0321460Z Collecting package-39==1.39.0
+2026-10-05T09:02:16.0419160Z Successfully installed package-0-1.0.0 package-1-1.1.0 package-2-1.2.0 package-3-1.3.0 package-4-1.4.0 package-5-1.5.0 package-6-1.6.0 package-7-1.7.0 package-8-1.8.0 package-9-1.9.0 package-10-1.10.0 package-11-1.11.0
+2026-10-05T09:02:16.0596050Z ##[group]Run python -m pytest -ra
+2026-10-05T09:02:16.0852130Z python -m pytest -ra
+2026-10-05T09:02:16.1187400Z shell: /usr/bin/bash -e {0}
+2026-10-05T09:02:16.1601860Z env:
+2026-10-05T09:02:16.2095510Z   DATABASE_URL: postgres://shop:***@localhost:5432/shop
+2026-10-05T09:02:16.2668350Z ##[endgroup]
+2026-10-05T09:02:16.3320380Z ============================= test session starts ==============================
+2026-10-05T09:02:16.4051600Z platform linux -- Python 3.12.11, pytest-8.4.2, pluggy-1.6.0
+2026-10-05T09:02:16.4862010Z rootdir: /home/runner/work/shop/shop
+2026-10-05T09:02:16.5751610Z collected 412 items
+2026-10-05T09:02:16.5820400Z 
+2026-10-05T09:02:16.5968380Z orders/tests/test_module_00.py ........................................ [  9%]
+2026-10-05T09:02:16.6195550Z orders/tests/test_module_01.py ........................................ [ 18%]
+2026-10-05T09:02:16.6501910Z orders/tests/test_module_02.py ........................................ [ 27%]
+2026-10-05T09:02:16.6887460Z orders/tests/test_module_03.py ........................................ [ 36%]
+2026-10-05T09:02:16.7352200Z orders/tests/test_module_04.py ........................................ [ 45%]
+2026-10-05T09:02:16.7896130Z orders/tests/test_module_05.py ........................................ [ 54%]
+2026-10-05T09:02:16.8519250Z orders/tests/test_module_06.py ........................................ [ 63%]
+2026-10-05T09:02:16.9221560Z orders/tests/test_module_07.py ........................................ [ 72%]
+2026-10-05T09:02:17.0003060Z orders/tests/test_module_08.py ........................................ [ 81%]
+2026-10-05T09:02:17.0863750Z orders/tests/test_module_09.py ........................................ [ 90%]
+2026-10-05T09:02:17.1803630Z orders/tests/test_refunds.py ...F.......                               [ 99%]
+2026-10-05T09:02:17.1922700Z orders/tests/test_totals.py ....                                         [100%]
+2026-10-05T09:02:17.2120960Z 
+2026-10-05T09:02:17.2398410Z =================================== FAILURES ===================================
+2026-10-05T09:02:17.2755050Z ____________________ test_refund_is_rejected_after_30_days _____________________
+2026-10-05T09:02:17.3190880Z 
+2026-10-05T09:02:17.3705900Z     def test_refund_is_rejected_after_30_days(order_factory):
+2026-10-05T09:02:17.4300110Z         order = order_factory(placed_days_ago=31)
+2026-10-05T09:02:17.4973510Z         response = client.post(f"/api/orders/{order.id}/refund/")
+2026-10-05T09:02:17.5726100Z >       assert response.status_code == 400
+2026-10-05T09:02:17.6557880Z E       assert 201 == 400
+2026-10-05T09:02:17.7468850Z E        +  where 201 = <Response status_code=201>.status_code
+2026-10-05T09:02:17.7559010Z 
+2026-10-05T09:02:17.7728360Z orders/tests/test_refunds.py:48: AssertionError
+2026-10-05T09:02:17.7976900Z =========================== short test summary info ============================
+2026-10-05T09:02:17.8304630Z FAILED orders/tests/test_refunds.py::test_refund_is_rejected_after_30_days - assert 201 == 400
+2026-10-05T09:02:17.8711550Z ================== 1 failed, 411 passed, 37 warnings in 92.31s ==================
+2026-10-05T09:02:17.9197660Z ##[error]Process completed with exit code 1.
+2026-10-05T09:02:17.9762960Z Post job cleanup.
+2026-10-05T09:02:18.0407450Z [command]/usr/bin/git version
+2026-10-05T09:02:18.1131130Z git version 2.51.0
+2026-10-05T09:02:18.1934000Z Temporarily overriding HOME='/home/runner/work/_temp/0b6f1c1e-6a51-4c55-9d4e-2f3a8e1c7d90' before making global git config changes
+2026-10-05T09:02:18.2816060Z Adding repository directory to the temporary git global config as a safe directory
+2026-10-05T09:02:18.2877310Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/shop/shop
+2026-10-05T09:02:18.3017750Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-10-05T09:02:18.3237380Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-10-05T09:02:18.3536200Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-10-05T09:02:18.3914210Z http.https://github.com/.extraheader
+2026-10-05T09:02:18.4371410Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-10-05T09:02:18.4907800Z Stop and remove container: 2b9d4e6c8a1f4d3e9b7a5c1e0f2d4b6a_postgres16alpine_8c1f2e
+2026-10-05T09:02:18.5523380Z Print service container logs: 2b9d4e6c8a1f4d3e9b7a5c1e0f2d4b6a_postgres16alpine_8c1f2e
+2026-10-05T09:02:18.6218150Z ##[command]/usr/bin/docker logs --details 7c2e4f1a9b8d
+2026-10-05T09:02:18.6992110Z  The files belonging to this database system will be owned by user "postgres".
+2026-10-05T09:02:18.7845260Z  This user must also own the server process.
+2026-10-05T09:02:18.8777600Z  
+2026-10-05T09:02:18.8889130Z  The database cluster will be initialized with locale "en_US.utf8".
+2026-10-05T09:02:18.9079850Z  The default database encoding has accordingly been set to "UTF8".
+2026-10-05T09:02:18.9349760Z  sh: locale: not found
+2026-10-05T09:02:18.9698860Z  The default text search configuration will be set to "english".
+2026-10-05T09:02:19.0127150Z  2026-10-05 09:08:45.794 UTC [34] WARNING:  no usable system locales were found
+2026-10-05T09:02:19.0634630Z  initdb: warning: enabling "trust" authentication for local connections
+2026-10-05T09:02:19.1221300Z  
+2026-10-05T09:02:19.1887160Z  fixing permissions on existing directory /var/lib/postgresql/data ... ok
+2026-10-05T09:02:19.2632210Z  creating subdirectories ... ok
+2026-10-05T09:02:19.3456450Z  selecting dynamic shared memory implementation ... posix
+2026-10-05T09:02:19.4359880Z  selecting default max_connections ... 100
+2026-10-05T09:02:19.4442500Z  selecting default shared_buffers ... 128MB
+2026-10-05T09:02:19.4604310Z  creating configuration files ... ok
+2026-10-05T09:02:19.4845310Z  running bootstrap script ... ok
+2026-10-05T09:02:19.5165500Z  syncing data to disk ... ok
+2026-10-05T09:02:19.5564880Z  2026-10-05 09:08:47.038 UTC [1] LOG:  starting PostgreSQL 16.10 on x86_64-pc-linux-musl
+2026-10-05T09:02:19.6043450Z  2026-10-05 09:08:47.038 UTC [1] LOG:  listening on IPv4 address "0.0.0.0", port 5432
+2026-10-05T09:02:19.6601210Z  2026-10-05 09:08:47.085 UTC [1] LOG:  database system is ready to accept connections
+2026-10-05T09:02:19.7238160Z  2026-10-05 09:10:22.611 UTC [1] LOG:  received fast shutdown request
+2026-10-05T09:02:19.7954300Z  2026-10-05 09:10:22.614 UTC [1] LOG:  background worker "logical replication launcher" (PID 62) exited with exit code 3
+2026-10-05T09:02:19.8749630Z  2026-10-05 09:10:22.640 UTC [1] LOG:  database system is shut down
+2026-10-05T09:02:19.9624150Z ##[command]/usr/bin/docker rm --force 7c2e4f1a9b8d
+2026-10-05T09:02:19.9677860Z 7c2e4f1a9b8d
+2026-10-05T09:02:19.9810760Z Remove container network: github_network_4d6a1c2e8b9f
+2026-10-05T09:02:20.0022850Z ##[command]/usr/bin/docker network rm github_network_4d6a1c2e8b9f
+2026-10-05T09:02:20.0314130Z github_network_4d6a1c2e8b9f
+2026-10-05T09:02:20.0684600Z Cleaning up orphan processes

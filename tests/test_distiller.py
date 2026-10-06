@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+import pytest
+
 from pipelinemd.distill import distill
 
 from .fixtures.secrets import ALL_SECRETS
@@ -53,6 +55,23 @@ def test_noisy_trace_is_reduced_hard(trace: Callable[[str], str]) -> None:
 def test_evidence_keeps_the_verdict(any_trace: tuple[str, str]) -> None:
     _name, raw = any_trace
     assert "ERROR: Job failed" in distill(raw).evidence_text()
+
+
+GITHUB_CAUSES = {
+    "github/pytest_service_container": "FAILED orders/tests/test_refunds.py",
+    "github/npm_eresolve_docker_build": "npm error Could not resolve dependency:",
+}
+
+
+@pytest.mark.parametrize(("name", "cause"), sorted(GITHUB_CAUSES.items()))
+def test_github_evidence_keeps_the_verdict_and_the_cause(
+    trace: Callable[[str], str], name: str, cause: str
+) -> None:
+    result = distill(trace(name))
+    assert result.failure_reason == "##[error]Process completed with exit code 1."
+    assert result.exit_code == 1
+    assert "##[error]Process completed with exit code 1." in result.evidence_text()
+    assert cause in result.evidence_text()
 
 
 def test_sections_and_commands_are_recovered(trace: Callable[[str], str]) -> None:

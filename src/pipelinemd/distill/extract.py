@@ -4,7 +4,8 @@ A cleaned trace is still mostly noise: dependency resolution, test names that
 passed, artifact uploads. This module scores every line for how much it looks
 like a failure signal, grows a window around the strong ones, merges
 overlapping windows, and spends a fixed line budget on the best of them. The
-tail is always kept - gitlab-runner writes its verdict there.
+tail is always kept - gitlab-runner writes its verdict there. On GitHub Actions
+the "tail" ends at the verdict, before the post-job steps that follow it.
 """
 
 from __future__ import annotations
@@ -13,14 +14,18 @@ import re
 from dataclasses import dataclass
 
 from ..models import EvidenceBlock, EvidenceLine, TraceLine
+from .trace import POST_JOB_SECTION
 
 # (name, pattern, weight). Weights are additive: a line that both says
 # "ERROR" and names an exit code outranks one that only says "failed".
 SIGNALS: tuple[tuple[str, re.Pattern[str], float], ...] = (
     ("job-failed", re.compile(r"^ERROR: Job failed"), 100.0),
     ("error-prefix", re.compile(r"^\s*(?:ERROR|FATAL)\b[: ]"), 40.0),
+    # GitHub Actions' own error annotation, its verdict line included.
+    ("github-error", re.compile(r"^##\[error\]"), 40.0),
     ("fatal-git", re.compile(r"^\s*fatal:"), 35.0),
-    ("npm-err", re.compile(r"^npm ERR!"), 25.0),
+    # npm 10 prints "npm error"; earlier versions printed "npm ERR!".
+    ("npm-err", re.compile(r"^npm (?:ERR!|error\b)"), 25.0),
     ("traceback", re.compile(r"Traceback \(most recent call last\)"), 60.0),
     ("panic", re.compile(r"^\s*(?:panic|goroutine \d+ \[running\]):"), 55.0),
     ("go-test-fail", re.compile(r"^\s*--- FAIL:"), 40.0),
@@ -80,6 +85,13 @@ DAMPENERS: tuple[tuple[str, re.Pattern[str], float], ...] = (
     ),
 )
 
+# BuildKit's plain progress output puts the step number and elapsed seconds in
+# front of every line a RUN instruction prints: "#9 1.481 npm error code
+# ERESOLVE". Signals anchored to the start of a line would never see the tool's
+# own text behind it, so the prefix is skipped when scoring. The line itself is
+# kept as printed.
+_BUILDKIT_PREFIX = re.compile(r"^#\d+ (?:\d+\.\d+ )?")
+
 DEFAULT_THRESHOLD = 10.0
 DEFAULT_MAX_LINES = 200
 DEFAULT_TAIL_LINES = 30
@@ -116,6 +128,7 @@ def score_line(text: str) -> tuple[float, tuple[str, ...]]:
     """Score one line for failure-likeness. Returns (score, matched signals)."""
     if not text.strip():
         return 0.0, ()
+    text = _BUILDKIT_PREFIX.sub("", text, count=1)
     total = 0.0
     names: list[str] = []
     for name, pattern, weight in SIGNALS:
@@ -186,6 +199,10 @@ def _split(window: Window, allowance: int) -> tuple[Window, Window]:
 
 
 def _last_meaningful_line(lines: list[TraceLine]) -> int:
+    """The last line with text, short of what GitHub runs after its verdict."""
+    for line in reversed(lines):
+        if line.text.strip() and line.section != POST_JOB_SECTION:
+            return line.number
     for line in reversed(lines):
         if line.text.strip():
             return line.number
@@ -271,7 +288,8 @@ def select_evidence(
     ]
 
     # The runner's verdict lives in the last lines; never let the budget
-    # squeeze it out.
+    # squeeze it out. On GitHub that is where the failing step ended, before
+    # the post-job steps.
     last_line = _last_meaningful_line(lines)
     tail = Window(
         start=max(1, last_line - tail_lines + 1),

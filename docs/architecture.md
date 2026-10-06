@@ -55,8 +55,9 @@ problems solved separately.
 **1. Which lines are evidence** (`distill/extract.py`). Weighted signals score
 each line; strong ones grow a window; windows merge; a line budget is spent
 best-first. The tail is pinned because gitlab-runner writes its verdict there.
-A window larger than the whole budget is split into head and end rather than
-being allowed to swallow it.
+On a GitHub Actions log the pinned tail ends at GitHub's verdict instead, before
+the post-job steps that follow it. A window larger than the whole budget is
+split into head and end rather than being allowed to swallow it.
 
 **2. Which evidence lines to show** (`render/evidence.py`). A 200-line excerpt
 still does not fit a 40-line terminal. Tiers decide: the runner's closing
@@ -77,7 +78,14 @@ job. Four mechanisms address it:
   `upload_artifacts_on_failure` or `after_script` is describing something that
   happened *because* the job already failed, so it is scored down 45 points and
   cannot outrank a hit in `step_script`. Without this, "artifact upload found no
-  matching files" outranks the npm error that caused it.
+  matching files" outranks the npm error that caused it. GitHub Actions has no
+  section markers, but it does print a verdict,
+  `##[error]Process completed with exit code N.`, and then keeps going:
+  `if: failure()` steps, each action's post step, and the service containers'
+  own logs. Everything after that verdict is read into one `post_job` section
+  that takes the same penalty, and the displayed excerpt only shows it when
+  there is room to spare. Without it, Postgres printing `sh: locale: not found`
+  while its container is torn down outranks the failing test.
 - **The verdict.** `ERROR: Job failed (system failure): …` is the runner
   concluding, then restating the cause. `runner.system-failure` matches the
   conclusion and is a container — its own first fix reads "read the line right
@@ -303,4 +311,7 @@ a `--format` choice. `render/json_out.py` is the smallest example.
 **A new source** (GitHub Actions, Jenkins) needs a client producing a raw trace
 and a `JobRef`. The distiller's GitLab-specific parts are the `section_start`
 markers and the `ERROR: Job failed` verdict; everything else is generic
-terminal handling that applies to any CI log.
+terminal handling that applies to any CI log. GitHub Actions logs are already
+read: their verdict and post-job steps are recognised, but their `##[group]`
+steps are not yet, and there is no client for them
+([#50](https://github.com/rbalukja15/pipelinemd/issues/50)).
