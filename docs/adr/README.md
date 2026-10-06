@@ -9,6 +9,7 @@ system as it stands; these explain how it got that way.
 | ADR | Decision | Status |
 | --- | --- | --- |
 | [0001](0001-stack-and-scope.md) | A GitLab CI failure doctor: a deterministic core with the model at the edge, shipped as a zero-dependency Python CLI | Accepted |
+| [0002](0002-gitlab-access.md) | GitLab access: read-only with the narrowest token, tokens kept to their own instance, writes opt-in and gated | Accepted |
 
 ## Writing one
 
