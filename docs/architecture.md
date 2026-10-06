@@ -270,11 +270,11 @@ The same reasoning is why there is an image. A diagnose job that runs
 is already broken, so `ghcr.io/rbalukja15/pipelinemd` ships the CLI with the
 `[llm]` extra already installed, and a GitLab job names it in `image:`.
 
-The image is built from the tagged source rather than installed from PyPI, so
+The image is built from the merged source rather than installed from PyPI, so
 CI can build and smoke-test it on every push, long before the version exists
-anywhere. Both are published by one workflow from one tag, and the version is
-written in one place, `__version__`, which hatch reads into the package
-metadata and the release workflow checks the tag against. How a release runs,
+anywhere. Both are published by one workflow from one commit, and the version
+is written in one place, `__version__`, which hatch reads into the package
+metadata and the release workflow makes the tag from. How a release runs,
 and why in that order: [releasing](releasing.md).
 
 ## Trust boundaries

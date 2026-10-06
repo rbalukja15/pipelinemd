@@ -1,7 +1,7 @@
 """Release hygiene, checked without Docker or a network.
 
-The release workflow refuses a tag whose version has no changelog section, but
-only once someone pushes the tag. Checking here means a version bump without a
+The release workflow refuses a version that has no changelog section, but only
+once the bump reaches main. Checking here means a version bump without a
 changelog entry fails on the pull request instead.
 """
 
@@ -82,6 +82,18 @@ def test_a_matching_dated_section_gives_its_body_as_the_notes() -> None:
 def test_a_release_is_refused(tag: str, version: str, reason: str) -> None:
     with pytest.raises(ValueError, match=reason):
         release_notes.check(tag, f'__version__ = "{version}"\n', CHANGELOG)
+
+
+def test_a_release_with_unlisted_changes_is_refused() -> None:
+    changelog = CHANGELOG.replace("## [Unreleased]\n", "## [Unreleased]\n\n- Merged since.\n")
+    with pytest.raises(ValueError, match=r"under \[Unreleased\]"):
+        release_notes.check("v1.2.0", '__version__ = "1.2.0"\n', changelog)
+
+
+def test_the_release_tag_is_the_final_version() -> None:
+    assert release_notes.release_tag('__version__ = "1.2.0"\n') == "v1.2.0"
+    with pytest.raises(ValueError, match="not a final"):
+        release_notes.release_tag('__version__ = "1.3.0rc1"\n')
 
 
 def test_the_image_entrypoint_is_the_cli() -> None:
