@@ -8,6 +8,8 @@ from pipelinemd.config import (
     resolve_anthropic_key,
     resolve_credentials,
     resolve_gitlab_url,
+    same_instance,
+    scope_credentials,
 )
 
 
@@ -31,6 +33,37 @@ def test_no_token_is_not_an_error() -> None:
     creds = resolve_credentials(env={})
     assert not creds.present
     assert creds.source == "none"
+
+
+def test_same_instance_compares_scheme_host_and_port() -> None:
+    assert same_instance("https://gitlab.com", "https://GitLab.com/")
+    assert same_instance("https://gitlab.com:443", "gitlab.com")
+    assert same_instance("https://git.acme.io/gitlab", "https://git.acme.io")
+    assert not same_instance("https://gitlab.com", "https://gitlab.com.evil.io")
+    assert not same_instance("https://gitlab.com", "http://gitlab.com")
+    assert not same_instance("https://git.acme.io", "https://git.acme.io:8443")
+    assert not same_instance("https://git.acme.io:bad", "https://git.acme.io")
+
+
+def test_an_environment_token_stays_with_its_instance() -> None:
+    """$GITLAB_TOKEN was issued by one server; a pasted URL must not redirect it."""
+    creds = resolve_credentials(env={"GITLAB_TOKEN": "pat"})
+    kept = scope_credentials(creds, "https://gitlab.com", "https://gitlab.com")
+    withheld = scope_credentials(creds, "https://attacker.example", "https://gitlab.com")
+    assert kept.token == "pat"
+    assert withheld.token is None and not withheld.present
+
+
+def test_a_job_token_stays_with_its_instance() -> None:
+    creds = resolve_credentials(env={"CI_JOB_TOKEN": "job"})
+    withheld = scope_credentials(creds, "https://other.example", "https://git.acme.io")
+    assert withheld.token is None
+
+
+def test_an_explicit_token_goes_where_it_was_sent() -> None:
+    creds = resolve_credentials("abc", env={})
+    scoped = scope_credentials(creds, "https://git.acme.io", "https://gitlab.com")
+    assert scoped.token == "abc"
 
 
 def test_gitlab_url_resolution_order() -> None:

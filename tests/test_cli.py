@@ -265,6 +265,46 @@ def test_diagnose_a_job_url(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "npm.eresolve" in out
 
 
+def _capture_token(monkeypatch: pytest.MonkeyPatch) -> list[str | None]:
+    sent: list[str | None] = []
+
+    def client(base_url: str, token: str | None, **kwargs: Any) -> _FakeClient:
+        sent.append(token)
+        return _FakeClient()
+
+    monkeypatch.setattr(cli, "GitLabClient", client)
+    for name in ("PIPELINEMD_TOKEN", "GITLAB_PRIVATE_TOKEN", "CI_JOB_TOKEN", "CI_SERVER_URL"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.delenv("PIPELINEMD_GITLAB_URL", raising=False)
+    monkeypatch.setenv("GITLAB_TOKEN", "pat")
+    return sent
+
+
+def test_an_environment_token_is_not_sent_to_another_host(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sent = _capture_token(monkeypatch)
+    code, _out, err = run("diagnose", "https://attacker.example/a/b/-/jobs/1", "--no-llm")
+    assert code == EXIT_OK
+    assert sent == [None]
+    assert "not sending $GITLAB_TOKEN to https://attacker.example" in err
+    assert "pat" not in err
+
+
+def test_an_environment_token_reaches_its_own_instance(monkeypatch: pytest.MonkeyPatch) -> None:
+    sent = _capture_token(monkeypatch)
+    run("diagnose", "https://gitlab.com/acme/web/-/jobs/1", "--no-llm")
+    monkeypatch.setenv("PIPELINEMD_GITLAB_URL", "https://git.acme.io")
+    run("diagnose", "https://git.acme.io/acme/web/-/jobs/1", "--no-llm")
+    assert sent == ["pat", "pat"]
+
+
+def test_an_explicit_token_reaches_any_host(monkeypatch: pytest.MonkeyPatch) -> None:
+    sent = _capture_token(monkeypatch)
+    run("diagnose", "https://git.acme.io/acme/web/-/jobs/1", "--token", "abc", "--no-llm")
+    assert sent == ["abc"]
+
+
 def test_diagnose_a_pipeline_picks_the_failed_job(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(cli, "GitLabClient", _FakeClient)
     code, out, _err = run(

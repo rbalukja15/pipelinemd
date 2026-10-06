@@ -17,7 +17,13 @@ from pathlib import Path
 from typing import IO, Any
 
 from . import __version__
-from .config import detect_ci, resolve_anthropic_key, resolve_credentials, resolve_gitlab_url
+from .config import (
+    detect_ci,
+    resolve_anthropic_key,
+    resolve_credentials,
+    resolve_gitlab_url,
+    scope_credentials,
+)
 from .diagnose import DEFAULT_MODEL
 from .diagnose import available as llm_available
 from .diagnose import diagnose as run_diagnosis
@@ -454,8 +460,16 @@ def cmd_diagnose(args: argparse.Namespace, stdout: IO[str], stderr: IO[str], std
         return EXIT_OK
 
     target = _resolve_target(args)
-    credentials = resolve_credentials(args.token)
-    if not credentials.present:
+    found = resolve_credentials(args.token)
+    instance = resolve_gitlab_url(args.gitlab_url)
+    credentials = scope_credentials(found, target.base_url, instance)
+    if found.present and not credentials.present:
+        stderr.write(
+            f"note: not sending ${found.source} to {target.base_url}: it belongs to "
+            f"{instance}. Set PIPELINEMD_GITLAB_URL={target.base_url} if it is for "
+            "this instance, or pass --token.\n"
+        )
+    elif not credentials.present:
         stderr.write(
             "note: no GitLab token found. Public projects still work; private ones "
             "need $GITLAB_TOKEN or --token.\n"
