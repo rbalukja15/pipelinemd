@@ -113,7 +113,14 @@ diagnoses the first and names the rest (`--all-jobs` does them all).
 
 Credentials come from `--token`, `$PIPELINEMD_TOKEN`, `$GITLAB_TOKEN`,
 `$GITLAB_PRIVATE_TOKEN` or `$CI_JOB_TOKEN` — in that order, with the right
-header for each. Public projects need no token at all.
+header for each. Public projects need no token at all. A token only needs the
+`read_api` scope, and pipelinemd never writes to GitLab.
+
+A token from the environment is only sent to the instance it belongs to:
+`$PIPELINEMD_GITLAB_URL`, `$CI_SERVER_URL` inside a pipeline, or gitlab.com.
+For a self-managed instance, set `PIPELINEMD_GITLAB_URL` or pass `--gitlab-url`;
+a URL on any other host is fetched without the token. The reasoning is in
+[ADR-0002](https://github.com/rbalukja15/pipelinemd/blob/main/docs/adr/0002-gitlab-access.md).
 
 ### Distil a log you already have — fully offline
 
