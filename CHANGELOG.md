@@ -8,6 +8,13 @@ How a section becomes a release is in [docs/releasing.md](docs/releasing.md).
 
 ## [Unreleased]
 
+### Added
+
+- `pipelinemd eval --min-evidence-rate` fails when the share of corpus cases
+  whose marked line survives into the excerpt drops below a floor, and names
+  the cases that lost it. `make gate`, and so CI, now holds every case to it
+  ([#14](https://github.com/rbalukja15/pipelinemd/issues/14)).
+
 ## [0.1.2] - 2026-10-06
 
 ### Added

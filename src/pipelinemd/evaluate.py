@@ -166,6 +166,11 @@ class EvalReport:
         return tuple(r for r in self.results if not r.class_correct)
 
     @property
+    def evidence_misses(self) -> tuple[CaseResult, ...]:
+        """Every case - gaps included - whose marked line did not survive distillation."""
+        return tuple(r for r in self.results if not r.evidence_hit)
+
+    @property
     def gap_false_positives(self) -> tuple[CaseResult, ...]:
         """Gap cases that fired a rule. Scored by nothing else; see above."""
         return tuple(r for r in self.gaps if r.false_positive)
@@ -317,7 +322,7 @@ def format_report(report: EvalReport) -> str:
 
     # Widest id in whichever rows we are about to print, so a long id pushes
     # the column out instead of overflowing it and skewing its neighbours.
-    listed = report.misses + report.gaps + report.class_misses
+    listed = report.misses + report.gaps + report.class_misses + report.evidence_misses
     width = max((len(r.case.id) for r in listed), default=0)
 
     if report.misses:
@@ -342,6 +347,13 @@ def format_report(report: EvalReport) -> str:
             lines.append(
                 f"  {miss.case.id:<{width}} labelled {miss.case.failure_class} — "
                 f"got {miss.predicted_class} ({_class_miss_reason(miss)})"
+            )
+
+    if report.evidence_misses:
+        lines += ["", f"Evidence misses ({len(report.evidence_misses)})"]
+        for miss in report.evidence_misses:
+            lines.append(
+                f"  {miss.case.id:<{width}} {miss.case.evidence_marker!r} is not in the excerpt"
             )
 
     if all(r.case.provenance == "authored" for r in report.results):
@@ -408,6 +420,10 @@ def eval_report_to_dict(report: EvalReport) -> dict[str, object]:
                 "reason": _class_miss_reason(miss),
             }
             for miss in report.class_misses
+        ],
+        "evidence_misses": [
+            {"id": miss.case.id, "evidence_marker": miss.case.evidence_marker}
+            for miss in report.evidence_misses
         ],
         "gaps": [
             {
