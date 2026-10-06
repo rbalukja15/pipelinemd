@@ -17,6 +17,13 @@ How a section becomes a release is in [docs/releasing.md](docs/releasing.md).
   model could not ground, or one that needs human review. `--all-jobs` puts
   every job on one page with the run's total cost
   ([#19](https://github.com/rbalukja15/pipelinemd/issues/19)).
+- The HTML report opens with a card holding the answer, class, fix type,
+  confidence with its reasons, and cost, followed by a timeline of the job's
+  GitLab sections with the failing one flagged. Cited lines, line numbers in
+  the diagnosis's prose and rule matches all link to their evidence line,
+  which is highlighted when followed. Citations to lines the model was never
+  shown are listed and marked rather than dropped
+  ([#20](https://github.com/rbalukja15/pipelinemd/issues/20)).
 - `-o` can be given more than once to write one analysis in several formats,
   each chosen by the file's extension, so the model is asked once rather than
   once per file.

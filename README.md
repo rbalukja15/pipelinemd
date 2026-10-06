@@ -233,7 +233,7 @@ The skill lives in [`plugins/pipelinemd/`](https://github.com/rbalukja15/pipelin
 | --- | --- |
 | `terminal` (default) | Reading it yourself. Colour honours `NO_COLOR` and non-TTY output. |
 | `markdown` | Pasting into a merge request or issue. Collapsible evidence. |
-| `html` | A job artifact, or a file to open or attach. One self-contained page with no external assets, scripts or network access; follows light and dark mode and prints cleanly. `--all-jobs` puts every report on one page with the run's total. Shows the whole excerpt unless `--evidence-limit` says otherwise. |
+| `html` | A job artifact, or a file to open or attach. One self-contained page with no external assets, scripts or network access; follows light and dark mode and prints cleanly. It leads with a card holding the answer, class, fix type, confidence and cost, then a timeline of the job's sections with the one that failed flagged. Every line number the diagnosis cites or mentions, and every rule match, links to that line in the evidence and highlights it; a citation to a line the model was never shown is marked, not linked. `--all-jobs` puts every report on one page with the run's total. Shows the whole excerpt unless `--evidence-limit` says otherwise. |
 | `json` | Other tooling. Versioned via `schema_version`. One job is one report object; several (`--all-jobs`) are `{"reports": [...], "cost": {...}}`, with the run's total cost beside them. |
 
 `-o` given once writes `--format` to that file. Given several times, it writes

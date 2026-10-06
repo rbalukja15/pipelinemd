@@ -250,3 +250,98 @@ def test_an_unknown_extension_among_several_fails_before_any_work(
     )
     assert code == EXIT_USAGE
     assert "a.pdf" in err
+
+
+# -- timeline, diagnosis card, linked evidence (#20) -------------------------
+
+
+def _internal_links(page: str) -> list[str]:
+    return re.findall(r'href="#([^"]+)"', page)
+
+
+def test_every_internal_link_lands_on_something(report: Report) -> None:
+    grounded = replace(
+        DIAGNOSIS,
+        root_cause="Line 142 rejects the install; L999999 is not shown.",
+        unresolved_citations=(41203,),
+    )
+    for page in (
+        render_html([replace(report, diagnosis=grounded)]),
+        render_html([report, replace(report, job=replace(report.job, id=2))]),
+        render_html([replace(report, diagnosis=grounded)], evidence_limit=5),
+    ):
+        ids = set(_check(page).ids)
+        missing = [target for target in _internal_links(page) if target not in ids]
+        assert missing == []
+
+
+def test_a_cited_line_links_to_and_highlights_its_evidence_line(report: Report) -> None:
+    """The acceptance test: click the citation, land on the highlighted line."""
+    page = render_html([replace(report, diagnosis=DIAGNOSIS)])
+    cited = page.split("<h3>Cited evidence</h3>", 1)[1]
+    assert '<a class="ln" href="#L142">142</a>' in cited
+    assert re.search(r'class="line anchor cited hit" id="L142"', page)
+    assert ".line:target" in page
+
+
+def test_line_numbers_in_the_prose_link_to_the_evidence(report: Report) -> None:
+    prose = replace(DIAGNOSIS, root_cause="Line 142 shows npm refusing; see also L143.")
+    page = render_html([replace(report, diagnosis=prose)])
+    assert '<a href="#L142">Line 142</a>' in page
+    assert '<a href="#L143">L143</a>' in page
+
+
+def test_invented_citations_are_shown_not_dropped(report: Report) -> None:
+    weak = replace(DIAGNOSIS, root_cause="Line 41203 proves it.", unresolved_citations=(41203,))
+    page = render_html([replace(report, diagnosis=weak)])
+    assert '<span class="invented" title="not in the evidence">Line 41203</span>' in page
+    assert re.search(r'class="line invented"><span class="ln">41203</span>', page)
+    assert 'href="#L41203"' not in page
+
+
+def test_rule_matches_link_to_their_evidence_line(report: Report) -> None:
+    page = render_html([report])
+    table = page.split("<h2>Rule matches</h2>", 1)[1].split("</table>", 1)[0]
+    assert f'<a href="#L{report.hits[0].line_number}">' in table
+
+
+def test_a_line_the_page_does_not_show_is_not_linked(report: Report) -> None:
+    page = render_html([report], evidence_limit=1)
+    ids = set(_check(page).ids)
+    assert all(target in ids for target in _internal_links(page))
+
+
+def test_the_card_leads_with_the_answer_class_and_fix_type(report: Report) -> None:
+    page = render_html([replace(report, diagnosis=DIAGNOSIS)])
+    card = page.split('<div class="card', 1)[1].split("<h2>", 1)[0]
+    assert "npm ci failed on a peer dependency conflict" in card
+    assert "<dt>class</dt><dd><code>test</code></dd>" in card
+    assert "<dt>fix type</dt><dd><code>code_patch</code></dd>" in card
+    assert "est. cost $" in card
+
+
+def test_the_timeline_flags_the_section_that_failed(report: Report) -> None:
+    page = render_html([report])
+    timeline = page.split("<h2>Timeline</h2>", 1)[1].split("</ol>", 1)[0]
+    names = re.findall(r'<span class="name">([^<]+)</span>', timeline)
+    assert names == [section.name for section in report.distilled.sections]
+    failed = re.search(r'<li class="step failed"><span class="name">([^<]+)<', timeline)
+    assert failed and failed.group(1) == "step_script"
+    assert f'failed here</span> <a class="jump" href="#L{report.hits[0].line_number}">' in timeline
+    assert '<li class="step after"><span class="name">upload_artifacts_on_failure' in timeline
+    assert "74s" in timeline
+
+
+def test_a_github_log_has_no_timeline_of_one_untimed_step(
+    trace: Callable[[str], str],
+) -> None:
+    distilled = distill(trace("github/pytest_service_container"))
+    assert distilled.sections, "the post-job span exists, untimed"
+    page = render_html([Report(job=JobRef(name="x"), distilled=distilled)])
+    assert "<h2>Timeline</h2>" not in page
+
+
+def test_no_sections_no_timeline() -> None:
+    distilled = distill("npm ERR! code ERESOLVE\nERROR: Job failed: exit code 1\n")
+    page = render_html([Report(job=JobRef(name="x"), distilled=distilled)])
+    assert "<h2>Timeline</h2>" not in page
