@@ -44,9 +44,12 @@ detect ──┤           ├─► tag ─► pypi ─► image ─► github-
 - **github-release** comes last, so a release page only ever announces
   something that was published.
 
-The version lives in one place, `__version__` in
-`src/pipelinemd/__init__.py`. Hatch reads it into the package metadata, the
-image reports it with `--version`, and detect makes the tag from it.
+The version lives in `__version__` in `src/pipelinemd/__init__.py`. Hatch
+reads it into the package metadata, the image reports it with `--version`, and
+detect makes the tag from it. The Claude Code plugin's
+`plugins/pipelinemd/.claude-plugin/plugin.json` repeats it, because Claude Code
+only offers installed plugins an update when that version changes; a test fails
+while the two differ.
 
 ## One-time setup
 
@@ -90,8 +93,8 @@ GitHub.
 
 ## Each release
 
-1. **Bump the version** in `src/pipelinemd/__init__.py`. It is the only place
-   it is written down.
+1. **Bump the version** in `src/pipelinemd/__init__.py`, and the same version
+   in `plugins/pipelinemd/.claude-plugin/plugin.json`.
 2. **Date the changelog.** In `CHANGELOG.md`, turn the `[Unreleased]` section
    into `## [X.Y.Z] - YYYY-MM-DD` with today's date, add a fresh empty
    `## [Unreleased]` above it, and update the links at the foot of the file.
