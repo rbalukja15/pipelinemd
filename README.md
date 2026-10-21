@@ -222,6 +222,17 @@ diagnose:
 
 A ready-made job is in [`examples/gitlab-ci-diagnose.yml`](https://github.com/rbalukja15/pipelinemd/blob/main/examples/gitlab-ci-diagnose.yml).
 
+### Fixing the pipeline file with a merge request (opt-in)
+
+For a failure in the pipeline file itself, a job naming a stage that was never
+declared or an invalid key, `diagnose --open-mr` asks Claude for the corrected
+file, has GitLab's CI Lint check it, and opens a draft merge request with the
+diagnosis and the diff. It only acts on a `yaml_patch` failure at high
+confidence, in a project with the `pipelinemd-autofix` label, with a separate
+write token in `$PIPELINEMD_WRITE_TOKEN`; it never pushes to an existing branch
+or merges. Without the flag nothing is written. Setup and every gate:
+[docs/autofix.md](https://github.com/rbalukja15/pipelinemd/blob/main/docs/autofix.md).
+
 ### In Claude Code
 
 The repository is also a Claude Code plugin marketplace. Install the plugin

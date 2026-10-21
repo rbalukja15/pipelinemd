@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from collections.abc import Sequence
 from dataclasses import replace
@@ -17,22 +18,31 @@ from pathlib import Path
 from typing import IO, Any
 
 from . import __version__
+from .autofix import (
+    AUTOFIX_LABEL,
+    DEFAULT_MAX_CHANGED_LINES,
+    WRITE_TOKEN_ENV,
+    open_fix_mr,
+)
 from .config import (
     detect_ci,
     resolve_anthropic_key,
     resolve_credentials,
     resolve_gitlab_url,
+    same_instance,
     scope_credentials,
 )
 from .diagnose import DEFAULT_MODEL
 from .diagnose import available as llm_available
 from .diagnose import diagnose as run_diagnosis
+from .diagnose.patch import PatchProposal, propose_patch
 from .distill import distill
 from .distill.extract import DEFAULT_MAX_LINES, DEFAULT_TAIL_LINES, DEFAULT_THRESHOLD
 from .errors import DiagnosisError, GitLabError, PipelinemdError, UsageError
 from .evaluate import eval_report_to_dict, format_report, run_eval
 from .gitlab import GitLabClient, Target, parse_target, rebase, target_from_parts
-from .models import JobRef, Report, RetryHistory
+from .gitlab.write import WriteClient
+from .models import Diagnosis, DistilledLog, JobRef, Report, RetryHistory
 from .render import (
     ColorChoice,
     make_style,
@@ -195,6 +205,25 @@ def build_parser() -> argparse.ArgumentParser:
     )
     diagnose_parser.add_argument(
         "--timeout", type=float, default=30.0, help="HTTP timeout in seconds."
+    )
+    fix_group = diagnose_parser.add_argument_group(
+        "fix merge request (--open-mr)",
+        "For a yaml_patch failure at high confidence, ask Claude for the corrected "
+        f"pipeline file, check it with GitLab's CI Lint, and open a draft merge request. "
+        f"Off unless asked; needs ${WRITE_TOKEN_ENV} (api scope) and the project label "
+        f"`{AUTOFIX_LABEL}`. Never pushes to an existing branch or merges.",
+    )
+    fix_group.add_argument(
+        "--open-mr",
+        action="store_true",
+        help="Open a draft merge request with the fix when every gate passes.",
+    )
+    fix_group.add_argument(
+        "--max-fix-lines",
+        type=int,
+        default=DEFAULT_MAX_CHANGED_LINES,
+        metavar="N",
+        help=f"Largest change, in lines added plus removed (default: {DEFAULT_MAX_CHANGED_LINES}).",
     )
     add_distill_options(diagnose_parser)
     add_common(diagnose_parser)
@@ -505,9 +534,57 @@ def cmd_distill(args: argparse.Namespace, stdout: IO[str], stderr: IO[str], stdi
     return EXIT_OK
 
 
+def _check_open_mr(args: argparse.Namespace) -> str | None:
+    """The write token for --open-mr, or None without it. Fails before any work."""
+    if not args.open_mr:
+        return None
+    if args.from_file:
+        raise UsageError("--open-mr needs a GitLab job or pipeline URL, not --from-file.")
+    if args.no_llm:
+        raise UsageError("--open-mr needs Claude to write the fix, so not with --no-llm.")
+    if args.max_fix_lines < 1:
+        raise UsageError(f"--max-fix-lines must be at least 1, not {args.max_fix_lines}.")
+    if not llm_available():
+        raise UsageError("--open-mr needs the `anthropic` package: pip install 'pipelinemd[llm]'.")
+    token = os.environ.get(WRITE_TOKEN_ENV, "").strip()
+    if not token:
+        # Never the read token: granting read access must not imply write (ADR-0002).
+        raise UsageError(
+            f"--open-mr needs ${WRITE_TOKEN_ENV}, a token with the api scope. The read "
+            "token is never used to write."
+        )
+    return token
+
+
+def _open_mr(
+    report: Report, args: argparse.Namespace, base_url: str, token: str, stderr: IO[str]
+) -> Report:
+    api_key = resolve_anthropic_key(args.api_key)
+
+    def propose(
+        job: JobRef, distilled: DistilledLog, diagnosis: Diagnosis, path: str, config: str
+    ) -> PatchProposal:
+        return propose_patch(
+            job,
+            distilled,
+            diagnosis,
+            path,
+            config,
+            api_key=api_key,
+            model=args.model,
+            effort=args.effort,
+        )
+
+    writer = WriteClient(base_url, token, timeout=args.timeout)
+    outcome = open_fix_mr(report, writer, propose, max_changed_lines=args.max_fix_lines)
+    stderr.write(f"{outcome.message}\n")
+    return replace(report, fix_calls=outcome.calls) if outcome.calls else report
+
+
 def cmd_diagnose(args: argparse.Namespace, stdout: IO[str], stderr: IO[str], stdin: IO[str]) -> int:
     # A bad -o fails here, before a fetch or a billed model call, not after.
     _outputs(args)
+    write_token = _check_open_mr(args)
     # Offline path: a trace already on disk.
     if args.from_file:
         raw = _read_trace(args.from_file, stdin)
@@ -531,6 +608,12 @@ def cmd_diagnose(args: argparse.Namespace, stdout: IO[str], stderr: IO[str], std
     found = resolve_credentials(args.token)
     instance = resolve_gitlab_url(args.gitlab_url)
     credentials = scope_credentials(found, target.base_url, instance)
+    if write_token is not None and not same_instance(target.base_url, instance):
+        # Same rule as the read token (ADR-0002): a link cannot collect it.
+        raise UsageError(
+            f"--open-mr: ${WRITE_TOKEN_ENV} belongs to {instance}, not {target.base_url}. "
+            f"Set PIPELINEMD_GITLAB_URL={target.base_url} if it is for this instance."
+        )
     if found.present and not credentials.present:
         stderr.write(
             f"note: not sending ${found.source} to {target.base_url}: it belongs to "
@@ -585,12 +668,17 @@ def cmd_diagnose(args: argparse.Namespace, stdout: IO[str], stderr: IO[str], std
             hits=match_rules(distilled),
             retry=_retry_history(client, target.project, pipeline_id, job, pipelines, stderr),
         )
+        # A fix is written against the pipeline file, so the diagnosis behind
+        # it should have read that file too.
         ci_config = (
             client.get_ci_config(target.project, job_ref.ref or "HEAD")
-            if args.with_ci_config
+            if args.with_ci_config or args.open_mr
             else None
         )
-        reports.append(_maybe_diagnose(report, args, ci_config, stderr))
+        report = _maybe_diagnose(report, args, ci_config, stderr)
+        if write_token is not None:
+            report = _open_mr(report, args, target.base_url, write_token, stderr)
+        reports.append(report)
 
     _render(reports, args, stdout)
     return EXIT_OK

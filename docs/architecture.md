@@ -153,7 +153,7 @@ cannot show a job would have passed on retry — and it is shown when it
 disagrees. It is never applied, because of what the class controls:
 
 ```
-class → fix type → yaml_patch → #24 opens an MR
+class → fix type → yaml_patch → diagnose --open-mr may open an MR
 ```
 
 `yaml_patch` is the one value that can lead to an automated write, so it has
@@ -230,7 +230,8 @@ scores no diagnosis, so for an analysis the model's side demoted to low, the
 bar is a judgement rather than a measurement (see
 [evaluation](evaluation.md#what-the-table-cannot-see)).
 JSON carries the level, the flag, the bar and the reasons, so a consumer that
-wants a stricter bar — #24 might open MRs only at high — applies its own.
+wants a stricter bar applies its own. `--open-mr` acts only at high
+([autofix](autofix.md)).
 
 It stays an ordinal, like every confidence in this tool. A score of 0.83
 would claim a calibration nothing here has; the eval reports how often each
@@ -304,10 +305,13 @@ to look like structure.
 Redaction is mitigation, not a guarantee. A secret in a shape no pattern
 matches will pass through.
 
-GitLab credentials are the other boundary. The client only issues `GET`s, a
-token travels only in a header, and a token from the environment is only sent
-to the instance it was configured for, never to whatever host a pasted URL
-names. Writes, when #24 adds them, are opt-in and use their own credential.
+GitLab credentials are the other boundary. The read client only issues
+`GET`s, a token travels only in a header, and a token from the environment is
+only sent to the instance it was configured for, never to whatever host a
+pasted URL names. The one write path, `diagnose --open-mr`, lives in its own
+module (`gitlab/write.py`), uses its own token from `$PIPELINEMD_WRITE_TOKEN`
+under the same instance rule, and runs only behind the gates in
+[autofix](autofix.md).
 [ADR-0002](adr/0002-gitlab-access.md) has the full access model.
 
 ## Extending it

@@ -129,6 +129,7 @@ def cost_of(report: Report) -> Cost:
     calls = report.discarded_calls
     if report.diagnosis is not None:
         calls = (*calls, report.diagnosis.usage)
+    calls = (*calls, *report.fix_calls)
     return Cost(calls=tuple(calls), discarded=len(report.discarded_calls))
 
 
