@@ -22,6 +22,15 @@ How a section becomes a release is in [docs/releasing.md](docs/releasing.md).
   and `--case` limits it to chosen cases. It is billed, so it never runs in
   `make check` or on a push; a manual workflow runs it from the Actions tab
   ([#46](https://github.com/rbalukja15/pipelinemd/issues/46)).
+- `pipelinemd diagnose --open-mr` opens a draft merge request with the fix for
+  a failure in the pipeline file. Claude writes the corrected file, GitLab's
+  CI Lint has to accept it, and the change is capped at 20 lines
+  (`--max-fix-lines`). It acts only on a `yaml_patch` failure at high
+  confidence, in a project carrying the `pipelinemd-autofix` label, with its
+  own write token in `$PIPELINEMD_WRITE_TOKEN`, and it never pushes to an
+  existing branch or merges. Without the flag nothing is written
+  ([#24](https://github.com/rbalukja15/pipelinemd/issues/24),
+  [#25](https://github.com/rbalukja15/pipelinemd/issues/25)).
 
 ### Changed
 

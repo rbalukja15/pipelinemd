@@ -74,7 +74,15 @@ class HttpClient:
         raise GitLabError(f"GitLab returned {status} for {url}. {detail}", status=status)
 
     def _request(self, url: str) -> tuple[int, str, dict[str, str]]:
-        request = urllib.request.Request(url, headers=self._headers(), method="GET")
+        return self._send(urllib.request.Request(url, headers=self._headers(), method="GET"))
+
+    def _send(self, request: urllib.request.Request) -> tuple[int, str, dict[str, str]]:
+        """Send one request, retrying what is safe to retry. GET is all this class sends.
+
+        Writes live in `gitlab.write`, so reviewing the read path for safety
+        means reading this class alone (ADR-0002).
+        """
+        url = request.full_url
         last_error: Exception | None = None
 
         for attempt in range(self.retries + 1):

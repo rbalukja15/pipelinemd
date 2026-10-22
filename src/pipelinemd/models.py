@@ -434,6 +434,9 @@ class Report:
     #: real. The call that produced `diagnosis` is not repeated here - it is
     #: on the diagnosis itself - so the analysis's cost reads both.
     discarded_calls: tuple[Usage, ...] = ()
+    #: The call that wrote a fix for `diagnose --open-mr`, when one was made.
+    #: Part of what the analysis cost, whether or not a merge request came of it.
+    fix_calls: tuple[Usage, ...] = ()
 
     @property
     def top_hit(self) -> RuleHit | None:
