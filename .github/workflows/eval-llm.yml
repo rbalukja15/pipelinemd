@@ -1,0 +1,57 @@
+name: Eval (diagnosis layer)
+
+# Scores the Claude diagnosis against the corpus (`make eval-llm`). Billed per
+# run, so it only ever starts by hand from the Actions tab, never on a push,
+# and it never gates anything: `make gate` in CI is unchanged. Needs the
+# ANTHROPIC_API_KEY repository secret.
+on:
+  workflow_dispatch:
+    inputs:
+      max_cost:
+        description: Stop before the estimated spend passes this many USD
+        default: "5"
+        required: true
+      model:
+        description: Model to score
+        default: claude-opus-5
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eval-llm
+  cancel-in-progress: false
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install
+        run: python -m pip install ".[llm]"
+
+      # Inputs reach the command through the environment, quoted, never pasted
+      # into the script, so a value someone typed cannot become shell.
+      - name: Score the diagnosis layer
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          MAX_COST: ${{ inputs.max_cost }}
+          MODEL: ${{ inputs.model }}
+        run: |
+          python -m pipelinemd eval --llm --max-cost "$MAX_COST" --model "$MODEL" \
+            -o eval-llm.txt -o eval-llm.json
+          cat eval-llm.txt
+          { echo '```'; cat eval-llm.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eval-llm
+          path: eval-llm.*
+          if-no-files-found: ignore

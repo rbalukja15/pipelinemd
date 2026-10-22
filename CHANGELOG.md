@@ -10,6 +10,18 @@ How a section becomes a release is in [docs/releasing.md](docs/releasing.md).
 
 ### Added
 
+- A demo site with five failed jobs, four from the corpus and one real, each
+  with the HTML report `pipelinemd distill` writes for it. The Pages workflow
+  rebuilds it from main on every merge, so it always shows what the current
+  code does; `make demo` builds it locally
+  ([#21](https://github.com/rbalukja15/pipelinemd/issues/21)).
+- `pipelinemd eval --llm` (`make eval-llm`) scores the Claude diagnosis against
+  the corpus: its class accuracy beside the rules', whether its citations were
+  real, and whether it agreed with the top rule, per class, with the run's
+  cost. `--max-cost` stops the run before it would pass a cap ($5 by default),
+  and `--case` limits it to chosen cases. It is billed, so it never runs in
+  `make check` or on a push; a manual workflow runs it from the Actions tab
+  ([#46](https://github.com/rbalukja15/pipelinemd/issues/46)).
 - `pipelinemd diagnose --open-mr` opens a draft merge request with the fix for
   a failure in the pipeline file. Claude writes the corrected file, GitLab's
   CI Lint has to accept it, and the change is capped at 20 lines
@@ -19,6 +31,11 @@ How a section becomes a release is in [docs/releasing.md](docs/releasing.md).
   existing branch or merges. Without the flag nothing is written
   ([#24](https://github.com/rbalukja15/pipelinemd/issues/24),
   [#25](https://github.com/rbalukja15/pipelinemd/issues/25)).
+
+### Changed
+
+- `pipelinemd eval -o` can be given twice to write the text and JSON results
+  of one run, each chosen by the file's extension.
 
 ## [0.2.0] - 2026-10-06
 
