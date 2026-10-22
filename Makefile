@@ -51,7 +51,7 @@ IMAGE ?= pipelinemd:dev
 PACKAGE_VERSION ?= $(shell sed -n 's/^__version__ = "\(.*\)"$$/\1/p' src/pipelinemd/__init__.py)
 SMOKE_TRACE ?= corpus/traces/runner-oom-killed.log
 
-.PHONY: help install lint format typecheck test eval gate check dist image image-smoke \
+.PHONY: help install lint format typecheck test eval gate check dist demo image image-smoke \
 	release-notes clean
 
 help:
@@ -64,6 +64,7 @@ help:
 	@echo "gate           eval, failing below rule@1 $(MIN_RULE_ACCURACY), class $(MIN_CLASS_ACCURACY) or evidence $(MIN_EVIDENCE_RATE)"
 	@echo "check          lint + typecheck + test + gate, CI's test job"
 	@echo "dist           sdist + wheel into dist/, then twine check (needs build, twine)"
+	@echo "demo           build the demo site into build/demo (what the Pages workflow publishes)"
 	@echo "image          build the Docker image as $(IMAGE) (needs docker)"
 	@echo "image-smoke    run $(IMAGE) the ways CI and GitLab will (needs docker)"
 	@echo "release-notes  check \$$TAG against the version and changelog, print its notes"
@@ -102,6 +103,9 @@ dist:
 	rm -rf dist
 	$(PYTHON) -m build
 	$(PYTHON) -m twine check --strict dist/*
+
+demo:
+	$(PYTHON) scripts/build_demo.py build/demo
 
 # Not part of `check`: that has to run anywhere Python does, and these need a
 # Docker daemon. CI runs them in a job of their own. buildx with --load works
