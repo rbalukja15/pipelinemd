@@ -1,0 +1,60 @@
+name: Demo
+
+# Publishes the demo site (scripts/build_demo.py) to GitHub Pages. The reports
+# are built by the CLI from the code on main, so a change to the renderer, the
+# rules or the distiller shows up in the demo on its next merge rather than
+# leaving committed pages that describe an older pipelinemd. Pages must be set
+# to deploy from GitHub Actions (Settings, Pages, Source).
+on:
+  push:
+    branches: [main]
+    paths:
+      - src/**
+      - corpus/traces/**
+      - tests/fixtures/traces/github/**
+      - scripts/build_demo.py
+      - .github/workflows/pages.yml
+  workflow_dispatch:
+
+permissions: {}
+
+# A newer push supersedes a deploy still in flight; the site only ever needs
+# to show main as it is now.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      # The core has no dependencies, so a plain install is all the build needs.
+      - name: Build
+        run: |
+          python -m pip install .
+          python scripts/build_demo.py site
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

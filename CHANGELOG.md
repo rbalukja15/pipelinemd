@@ -10,6 +10,11 @@ How a section becomes a release is in [docs/releasing.md](docs/releasing.md).
 
 ### Added
 
+- A demo site with five failed jobs, four from the corpus and one real, each
+  with the HTML report `pipelinemd distill` writes for it. The Pages workflow
+  rebuilds it from main on every merge, so it always shows what the current
+  code does; `make demo` builds it locally
+  ([#21](https://github.com/rbalukja15/pipelinemd/issues/21)).
 - `pipelinemd eval --llm` (`make eval-llm`) scores the Claude diagnosis against
   the corpus: its class accuracy beside the rules', whether its citations were
   real, and whether it agreed with the top rule, per class, with the run's
