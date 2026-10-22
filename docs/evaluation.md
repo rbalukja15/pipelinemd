@@ -14,10 +14,12 @@ seconds, and gives the same answer every time.
 | **exit code** | Did the distiller read the runner's verdict correctly? |
 | **class by confidence** | At each confidence level a report can show, how often is the class right? Reported per level, not as one rate. |
 
-**The LLM diagnosis is deliberately not scored.** It needs an API key, costs
-money per run, and is not reproducible — folding it in would turn `make eval`
-from a regression gate into a bill, and would make the number depend on which
-model answered that day. Everything measured here is deterministic.
+**The LLM diagnosis is deliberately not scored here.** It needs an API key,
+costs money per run, and is not reproducible — folding it in would turn
+`make eval` from a regression gate into a bill, and would make the number
+depend on which model answered that day. Everything `make eval` measures is
+deterministic. The diagnosis has its own opt-in run,
+[`make eval-llm`](#the-diagnosis-layer-46), which never gates anything.
 
 `evidence` is the metric worth watching. It is a genuine measurement even on
 authored traces: the distiller's windowing and line budget are indifferent to
@@ -363,14 +365,66 @@ including the 43 cases the table scores at 91%. That is by design, but it is
 demoted to low by the model's side is wrong more often than right. Those
 demotions are reasoned — a diagnosis that invents a line, or contradicts the
 rules, is worth a person's time — and tested, not calibrated. Scoring them
-needs the diagnosis scored, which the eval leaves out on purpose (see the top
-of this document).
+needs the diagnosis scored, which `make eval` leaves out on purpose (see the
+top of this document). [`make eval-llm`](#the-diagnosis-layer-46) records, per
+case, whether the model's class was right and whether its citations were real,
+which is what a calibration of these demotions would start from.
 
 Unit tests cover each adjustment, and a property test checks every
 combination for the three promises: never above the rules or the model,
 reasons exactly when below high, review exactly at low.
 
-## Reading the number honestly
+## The diagnosis layer (#46)
+
+`make eval` answers "did a change break the rules". It cannot answer whether
+the Claude diagnosis is worth its cost, or for which classes, so that has a
+run of its own:
+
+```bash
+make eval-llm                                         # every case, capped at $5
+pipelinemd eval --llm --max-cost 2 --case runner-oom-killed --case yaml-unknown-stage
+pipelinemd eval --llm -o eval-llm.txt -o eval-llm.json  # both formats, one bill
+```
+
+It needs `pip install 'pipelinemd[llm]'` and `ANTHROPIC_API_KEY`. In GitHub
+it is the **Eval (diagnosis layer)** workflow, started by hand from the
+Actions tab with the key as a repository secret; its summary carries the
+scorecard and the JSON is kept as an artifact. Nothing runs it on a push,
+and `make gate` is unchanged.
+
+For every case it runs `diagnose` exactly as a user would get it, then scores,
+per failure class:
+
+| Column | Question |
+| --- | --- |
+| **rules** | The rules' class accuracy, over the same cases the model answered, so the two columns compare like for like. |
+| **model** | Was the model's `failure_class` the labelled one? |
+| **grounded** | Did every line it cited exist in the excerpt it was shown? An answer citing nothing real is rejected by the diagnosis layer and counts as not grounded. |
+| **agrees** | Where a rule fired, did the model put the case in the top rule's class? |
+
+Below the table it lists the cases where the model was right and the rules
+wrong, the reverse, every disagreement with the top rule, and every rejected
+answer, then the run's cost from the API's own token counts (the same
+`cost.py` the reports use).
+
+**The cap.** `--max-cost` (default $5) is checked before every call: the run
+stops before a call that, at the most any call has cost so far, would take the
+total past it, and says where it stopped. It can only overrun by a call dearer
+than all the ones before it. A model with no price on file is refused before
+the first call, since its spend could not be counted. Cases are taken a class
+at a time, so a run the cap ends early still covers every class.
+
+**What it cannot measure.** The model is not allowed to answer `flaky` — that
+is retry history's call — so the flaky row is one only the rules can win. And
+every case is authored by the same hand as the rules, so a model that beats
+the rules here has beaten an authored corpus, not the wild.
+
+### Results
+
+No run is recorded yet. Each run's scorecard goes here with the model,
+effort, date and cost it came from, since the number belongs to that model on
+that day and is not comparable across them.
+
 
 Every case is currently `provenance: authored`. The failures and the labels
 were written by the same hand that wrote the rules they are matched against, so
