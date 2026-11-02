@@ -7,6 +7,10 @@
 pipeline or workflow run, works out what actually broke, and tells you how to
 fix it.
 
+![pipelinemd diagnosing a job whose .gitlab-ci.yml names a stage that does not exist: the class, the fix, the matched rule and the evidence lines](https://raw.githubusercontent.com/rbalukja15/pipelinemd/main/docs/demo.gif)
+
+<sub>Rules only, offline, on the corpus trace `yaml-unknown-stage`. Read the case study: (link coming)</sub>
+
 A failed job's log is a terminal recording, not a report. It can run to tens of
 thousands of lines, most of them progress bars that rewrote themselves five
 hundred times, and the one line that matters is somewhere in the middle.
@@ -426,6 +430,9 @@ Then give it a v1 class in `RULE_CLASS` in `src/pipelinemd/taxonomy.py` — the
 suite fails until you do. Choose from what the failure *is*, and only use
 `flaky` if it is transient whatever the environment; anything that is merely
 often transient is flaky only when retry history says so.
+
+The repository's conventions, from commit messages to the rules a change must
+not weaken, are in [AGENTS.md](https://github.com/rbalukja15/pipelinemd/blob/main/AGENTS.md).
 
 ## License
 

@@ -10,6 +10,11 @@ How a section becomes a release is in [docs/releasing.md](docs/releasing.md).
 
 ### Added
 
+- The README opens with a short recording of `pipelinemd diagnose --no-llm`
+  run on a corpus trace: the class and fix type, the suggested fix, the
+  matched rule and the evidence lines, all offline. It lives in
+  `docs/demo.gif`, under a line that will link the case-study post
+  ([#27](https://github.com/rbalukja15/pipelinemd/issues/27)).
 - A demo site with five failed jobs, four from the corpus and one real, each
   with the HTML report `pipelinemd distill` writes for it. The Pages workflow
   rebuilds it from main on every merge, so it always shows what the current
@@ -43,6 +48,10 @@ How a section becomes a release is in [docs/releasing.md](docs/releasing.md).
   and seven GitHub Actions cases join the corpus, one of them observed.
   `examples/github-actions-diagnose.yml` is a ready-made workflow
   ([#50](https://github.com/rbalukja15/pipelinemd/issues/50)).
+- `AGENTS.md` at the repository root sets out how changes are made: the
+  Makefile targets, commit, branch and changelog conventions, the per-issue
+  workflow, and the product rules with the code that enforces each
+  ([#5](https://github.com/rbalukja15/pipelinemd/issues/5)).
 
 ### Changed
 
