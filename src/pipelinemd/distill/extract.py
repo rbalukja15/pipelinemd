@@ -57,6 +57,9 @@ SIGNALS: tuple[tuple[str, re.Pattern[str], float], ...] = (
     ("stack-frame", re.compile(r'^\s*(?:at |File ")'), 4.0),
     ("caused-by", re.compile(r"^\s*Caused by:"), 20.0),
     ("warning", re.compile(r"^\s*WARNING\b", re.I), 1.0),
+    # Passing runs carry deprecation and cache warnings too, so GitHub's
+    # warning annotation weighs no more than a plain WARNING.
+    ("github-warning", re.compile(r"^##\[warning\]"), 1.0),
 )
 
 # Lines that use failure vocabulary while reporting success. Without these,

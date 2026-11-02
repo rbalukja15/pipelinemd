@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 from functools import lru_cache
 
-from ..distill.trace import POST_JOB_SECTION
+from ..distill.trace import POST_JOB_SECTION, SOURCE_UNKNOWN
 from ..models import Confidence, DistilledLog, Rule, RuleHit
 from .catalog import ALL_RULES
 
@@ -81,6 +81,21 @@ CLEANUP_SECTIONS = frozenset(
         POST_JOB_SECTION,
     }
 )
+
+
+# GitHub prints an annotation's level in front of its text. A rule anchored at
+# the start of a line ("^npm error") should see the same text on both CIs, so
+# the prefix is dropped for matching; the line is still reported as printed.
+_ANNOTATION = re.compile(r"^##\[(?:error|warning|notice)\]")
+
+
+def _match_text(text: str) -> str:
+    return _ANNOTATION.sub("", text, count=1)
+
+
+def applies_to(rule: Rule, source: str) -> bool:
+    """Whether a rule may fire on a log from this source. Unknown logs get every rule."""
+    return not rule.sources or source == SOURCE_UNKNOWN or source in rule.sources
 
 
 @lru_cache(maxsize=2048)
@@ -155,19 +170,26 @@ def match_rules(
     the rule expects.
     """
     evidence_lines: list[tuple[int, str]] = [
-        (line.number, line.text) for block in distilled.evidence for line in block.lines
+        (line.number, _match_text(line.text))
+        for block in distilled.evidence
+        for line in block.lines
     ]
-    all_lines: list[tuple[int, str]] = [(line.number, line.text) for line in distilled.lines]
+    all_lines: list[tuple[int, str]] = [
+        (line.number, _match_text(line.text)) for line in distilled.lines
+    ]
+    printed = {line.number: line.text for line in distilled.lines}
     evidence_numbers = {number for number, _ in evidence_lines}
     section_of: dict[int, str | None] = {line.number: line.section for line in distilled.lines}
 
     evidence_corpus = "\n".join(text for _, text in evidence_lines)
-    full_corpus = distilled.clean_text()
+    full_corpus = "\n".join(text for _, text in all_lines)
     total_lines = max(1, distilled.stats.clean_lines)
     verdicts = [(number, text) for number, text in all_lines if VERDICT_LINE.match(text)]
 
     hits: list[RuleHit] = []
     for rule in rules:
+        if not applies_to(rule, distilled.source):
+            continue
         found = _first_match(rule.patterns, evidence_lines, rule.excludes)
         in_evidence = found is not None
         corpus = evidence_corpus
@@ -204,7 +226,7 @@ def match_rules(
             RuleHit(
                 rule=rule,
                 line_number=number,
-                line_text=text,
+                line_text=printed.get(number, text),
                 score=round(score, 2),
                 in_evidence=in_evidence,
             )

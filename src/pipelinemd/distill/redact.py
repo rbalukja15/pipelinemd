@@ -27,6 +27,8 @@ _PATTERNS: tuple[tuple[str, re.Pattern[str], int], ...] = (
     ("gitlab-legacy-runner-token", re.compile(r"\bGR1348941[A-Za-z0-9_\-]{20,}"), 0),
     # GitHub tokens (common in cross-CI setups).
     ("github-token", re.compile(r"\b gh[pousr]_[A-Za-z0-9]{16,} ".replace(" ", "")), 0),
+    # Fine-grained personal access tokens.
+    ("github-pat", re.compile(r"\b github_pat_[A-Za-z0-9_]{22,} ".replace(" ", "")), 0),
     # AWS.
     ("aws-access-key-id", re.compile(r"\b(?:AKIA|ASIA|AGPA|AIDA|AROA|ANPA|ANVA)[0-9A-Z]{16}\b"), 0),
     # Slack.

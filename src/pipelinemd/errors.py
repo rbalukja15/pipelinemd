@@ -16,12 +16,16 @@ class UsageError(PipelinemdError):
     """The invocation itself was wrong - bad URL, missing argument."""
 
 
-class GitLabError(PipelinemdError):
-    """The GitLab API refused, was unreachable, or answered unexpectedly."""
+class ApiError(PipelinemdError):
+    """A CI provider's API refused, was unreachable, or answered unexpectedly."""
 
     def __init__(self, message: str, *, status: int | None = None) -> None:
         super().__init__(message)
         self.status = status
+
+
+class GitLabError(ApiError):
+    """The GitLab API refused, was unreachable, or answered unexpectedly."""
 
 
 class AuthError(GitLabError):
@@ -30,6 +34,22 @@ class AuthError(GitLabError):
 
 class NotFoundError(GitLabError):
     """The project, pipeline or job does not exist (or is not visible)."""
+
+
+class GitHubError(ApiError):
+    """The GitHub API refused, was unreachable, or answered unexpectedly."""
+
+
+class GitHubAuthError(GitHubError):
+    """The token is missing, wrong, or lacks `actions: read`."""
+
+
+class GitHubNotFoundError(GitHubError):
+    """The repository, run or job does not exist (or the token cannot see it)."""
+
+
+class RateLimitError(GitHubError):
+    """GitHub's rate limit is spent until a reset time too far off to wait for."""
 
 
 class DiagnosisError(PipelinemdError):

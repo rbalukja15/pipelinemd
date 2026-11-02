@@ -8,7 +8,7 @@
 PYTHON ?= python3
 PYTEST_ARGS ?=
 
-# The regression floor for `make gate`. rule@1 is 55/55 today, so 0.92 is 51/55
+# The regression floor for `make gate`. rule@1 is 61/61 today, so 0.92 is 57/61
 # - the gate trips on the fifth regression. That headroom exists for one
 # reason: the corpus is meant to grow with observed traces, which will be
 # harder than the authored ones, and a gate that goes red the moment someone
@@ -24,7 +24,7 @@ MIN_RULE_ACCURACY ?= 0.92
 # The class floor. Class is the input to the fix type, and yaml_patch is what
 # #24's MR generator acts on, so a regression here is the one with the sharpest
 # downside - it should fail a build, not just move a printed number. Class is
-# 51/62 today; 0.78 is 49/62, so the gate trips on the third regression. Same
+# 57/69 today; 0.78 is 54/69, so the gate trips on the fourth regression. Same
 # rule as above: lowering it in a commit that says why is the intended response
 # to adding hard traces, not a failure.
 MIN_CLASS_ACCURACY ?= 0.78

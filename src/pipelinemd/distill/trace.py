@@ -1,15 +1,22 @@
-"""Turn a raw gitlab-runner trace into clean, numbered, attributed lines.
+"""Turn a raw job log into clean, numbered, attributed lines.
 
-The runner interleaves four things in one stream: the script's own output,
+gitlab-runner interleaves four things in one stream: the script's own output,
 collapsible section markers, optional per-line timestamps, and terminal
 control codes. This module separates them, so everything downstream sees
 plain text plus structured metadata about it.
+
+A GitHub Actions log carries the same kinds of thing in other shapes: a
+timestamp on every line, `##[group]Run …` step headers instead of section
+markers, `##[error]` annotations, and a verdict followed by post-job cleanup.
+The source is read from the log itself, so an offline `distill` of a
+downloaded log gets the same structure as `diagnose` does.
 """
 
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 from ..models import Section, TraceLine
 from .ansi import apply_overwrites, expand_tabs, strip_ansi
@@ -35,6 +42,10 @@ _TIMESTAMP = re.compile(
     r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z(?: |$)(?:[0-9a-f]{2}[OE][+ ])?"
 )
 
+_TIMESTAMP_ANYWHERE = re.compile(
+    r"^\ufeff?\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z ?", re.MULTILINE
+)
+
 # GitHub Actions prints its verdict at the end of the failing step and then
 # keeps going: steps that run `if: failure()`, each action's post step, the
 # service containers' own logs, orphan-process cleanup. All of it happens
@@ -52,6 +63,31 @@ _GITHUB_POST_JOB = re.compile(
     r"^(?:Post job cleanup\.$|Print service container logs: |Stop and remove container: |"
     r"Cleaning up orphan processes$)"
 )
+
+#: Which CI wrote a log. "unknown" is text with neither's markers, such as a
+#: pasted excerpt; every rule applies to it.
+SOURCE_GITLAB = "gitlab"
+SOURCE_GITHUB = "github"
+SOURCE_UNKNOWN = "unknown"
+
+_GITLAB_MARK = re.compile(r"^(?:Running with gitlab-runner|section_start:\d)", re.MULTILINE)
+_GITHUB_MARK = re.compile(
+    r"^(?:Current runner version: |##\[group\]Run |##\[error\])", re.MULTILINE
+)
+# The time at the front of a GitHub log line, kept for step durations before
+# _TIMESTAMP strips it.
+_GITHUB_TIME = re.compile(r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(\.\d+)?Z")
+# A step's header. Its `##[group]`/`##[endgroup]` pair wraps only the step's
+# echo (`with:`, `shell:`, `env:`); the output follows it, up to the next
+# header. `::group::` blocks inside a step print `##[group]` too, but never
+# with "Run " in front.
+_GITHUB_STEP = re.compile(r"^##\[group\](Run .+)$")
+_GITHUB_ERROR = re.compile(r"^##\[error\]")
+#: What a GitHub log holds before its first step.
+SETUP_SECTION = "Set up job"
+_GITHUB_RUNNER = re.compile(r"^Current runner version: '([^']+)'")
+_GITHUB_IMAGE = re.compile(r"^Image: (\S+)$")
+_GITHUB_IMAGE_VERSION = re.compile(r"^Version: (\S+)$")
 
 _RUNNER = re.compile(r"^Running with gitlab-runner\s+(.+?)\s*$")
 _RUNNER_ON = re.compile(r"^\s*on\s+(.+?)\s*$")
@@ -78,6 +114,7 @@ class CleanedTrace:
     image: str | None
     raw_bytes: int
     raw_lines: int
+    source: str = SOURCE_UNKNOWN
 
 
 def _truncate(line: str, limit: int = MAX_LINE_CHARS) -> str:
@@ -110,6 +147,67 @@ def _post_job_start(texts: list[str]) -> int | None:
     return next((n for n, text in enumerate(texts, start=1) if _GITHUB_POST_JOB.match(text)), None)
 
 
+def detect_source(raw: str) -> str:
+    """Which CI wrote this log, from the markers each one prints."""
+    if _GITLAB_MARK.search(raw):
+        return SOURCE_GITLAB
+    # Timestamps first: every line of a downloaded GitHub log starts with one.
+    if _GITHUB_MARK.search(_TIMESTAMP_ANYWHERE.sub("", raw)):
+        return SOURCE_GITHUB
+    return SOURCE_UNKNOWN
+
+
+def _seconds(raw_line: str) -> float | None:
+    match = _GITHUB_TIME.match(raw_line)
+    if not match:
+        return None
+    whole = datetime.fromisoformat(match.group(1)).replace(tzinfo=UTC).timestamp()
+    return whole + float(match.group(2) or 0)
+
+
+def _github_steps(
+    texts: list[str], times: list[float | None], post_job_start: int | None
+) -> list[Section]:
+    """Each step's span, from its header to the next, and which one failed.
+
+    The failed step holds the last `##[error]` before the post-job phase:
+    the verdict of a `run:` step, or an action's own `core.setFailed`.
+    """
+    last_line = (post_job_start - 1) if post_job_start is not None else len(texts)
+    starts = [
+        (number, match.group(1))
+        for number, text in enumerate(texts[:last_line], start=1)
+        if (match := _GITHUB_STEP.match(text))
+    ]
+    if not starts:
+        return []
+    if starts[0][0] > 1:
+        starts.insert(0, (1, SETUP_SECTION))
+    errors = [
+        number
+        for number, text in enumerate(texts[:last_line], start=1)
+        if _GITHUB_ERROR.match(text)
+    ]
+    failed_at = errors[-1] if errors else None
+
+    steps: list[Section] = []
+    for index, (start, name) in enumerate(starts):
+        boundary = starts[index + 1][0] if index + 1 < len(starts) else last_line + 1
+        end = boundary - 1
+        began, ended = times[start - 1], times[min(boundary, len(times)) - 1]
+        duration = (ended - began) if began is not None and ended is not None else None
+        steps.append(
+            Section(
+                name=name,
+                start_line=start,
+                end_line=end,
+                duration_s=round(duration, 3) if duration is not None and duration >= 0 else None,
+                failed=failed_at is not None and start <= failed_at <= end,
+            )
+        )
+    return steps
+
+
 def clean_trace(raw: str) -> CleanedTrace:
     """Parse a raw trace into numbered lines plus the metadata it carries."""
     raw_bytes = len(raw.encode("utf-8", errors="replace"))
@@ -118,6 +216,7 @@ def clean_trace(raw: str) -> CleanedTrace:
     raw = raw.removeprefix("\ufeff")
     clipped, _was_clipped = _clip_raw(raw)
     raw_line_list = clipped.replace("\r\n", "\n").split("\n")
+    source = detect_source(clipped)
 
     lines: list[TraceLine] = []
     sections: list[Section] = []
@@ -130,12 +229,16 @@ def clean_trace(raw: str) -> CleanedTrace:
     runner: str | None = None
     image: str | None = None
     expecting_runner_on = False
+    last_github_error: str | None = None
+    image_version_next = False
 
     cleaned_texts: list[str] = []
     metadata: list[tuple[int, str | None]] = []  # (raw_number, section)
+    times: list[float | None] = []
 
     for raw_number, raw_line in enumerate(raw_line_list, start=1):
         text = strip_ansi(raw_line)
+        times.append(_seconds(text) if source == SOURCE_GITHUB else None)
         text = _TIMESTAMP.sub("", text)
 
         # A single physical line can carry several markers back to back,
@@ -185,6 +288,13 @@ def clean_trace(raw: str) -> CleanedTrace:
         sections.append(
             Section(name=POST_JOB_SECTION, start_line=post_job_start, end_line=len(cleaned_texts))
         )
+    if source == SOURCE_GITHUB:
+        for step in _github_steps(cleaned_texts, times, post_job_start):
+            sections.append(step)
+            assert step.end_line is not None
+            for index in range(step.start_line - 1, step.end_line):
+                if metadata[index][1] is None:
+                    metadata[index] = (metadata[index][0], step.name)
 
     for index, (text, (raw_number, section)) in enumerate(
         zip(cleaned_texts, metadata, strict=True), start=1
@@ -202,8 +312,24 @@ def clean_trace(raw: str) -> CleanedTrace:
             runner = runner_match.group(1)
             expecting_runner_on = True
 
-        if image is None and (image_match := _IMAGE.search(text)):
+        if source != SOURCE_GITHUB and image is None and (image_match := _IMAGE.search(text)):
             image = image_match.group(1).rstrip(".")
+
+        if source == SOURCE_GITHUB:
+            if runner is None and (gh_runner := _GITHUB_RUNNER.match(text)):
+                runner = f"GitHub Actions runner {gh_runner.group(1)}"
+            # The hosted image is named inside the "Runner Image" group, before
+            # any step; a `container:` image is not, and stays unknown.
+            if section in (SETUP_SECTION, None):
+                if image is None and (gh_image := _GITHUB_IMAGE.match(text)):
+                    image = gh_image.group(1)
+                    image_version_next = True
+                    continue
+                if image_version_next and (gh_version := _GITHUB_IMAGE_VERSION.match(text)):
+                    image = f"{image} ({gh_version.group(1)})"
+                image_version_next = False
+            if header := _GITHUB_STEP.match(text):
+                commands.append(header.group(1).removeprefix("Run "))
 
         # What GitHub prints after its verdict is not the job's: a service
         # container's log can mention an exit code of its own.
@@ -211,8 +337,15 @@ def clean_trace(raw: str) -> CleanedTrace:
             continue
         if _JOB_FAILED.match(text) or _GITHUB_VERDICT.match(text):
             failure_reason = text
+        elif source == SOURCE_GITHUB and _GITHUB_ERROR.match(text):
+            # An action that fails through `core.setFailed` prints no exit
+            # code line; its last error is the verdict instead.
+            last_github_error = text
         if exit_match := _EXIT_CODE.search(text):
             exit_code = int(exit_match.group(1))
+
+    if failure_reason is None:
+        failure_reason = last_github_error
 
     # Sections still open when the trace ended - usually where the job died.
     for name, (start_line, _ts) in open_sections.items():
@@ -229,4 +362,5 @@ def clean_trace(raw: str) -> CleanedTrace:
         image=image,
         raw_bytes=raw_bytes,
         raw_lines=len(raw_line_list),
+        source=source,
     )

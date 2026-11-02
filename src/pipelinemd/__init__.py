@@ -1,4 +1,4 @@
-"""pipelinemd - GitLab CI/CD failure doctor.
+"""pipelinemd - CI failure doctor for GitLab CI and GitHub Actions.
 
 Two halves, deliberately separable:
 

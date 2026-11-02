@@ -228,8 +228,8 @@ def _failing_section(report: Report) -> str | None:
 
 def _timeline(report: Report, page: _Page) -> list[str]:
     sections = report.distilled.sections
-    # GitLab's sections are timed. A GitHub log only has the untimed post-job
-    # span pipelinemd marks itself, and a timeline of one bar says nothing.
+    # GitLab's sections and GitHub's steps are timed. A log with neither has at
+    # most an untimed span, and a timeline of one bar says nothing.
     if not any(section.duration_s is not None for section in sections):
         return []
     failing = _failing_section(report)
@@ -254,7 +254,7 @@ def _timeline(report: Report, page: _Page) -> list[str]:
         elif section.name in AFTER_FAILURE_SECTIONS:
             classes.append("after")
             notes.append("after the failure")
-        if section.failed_open:
+        if section.end_line is None:
             notes.append("never finished")
         duration = section.duration_s
         width = 0.0 if not total or duration is None else max(0.5, 100 * duration / total)

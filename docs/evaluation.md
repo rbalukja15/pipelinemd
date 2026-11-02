@@ -28,28 +28,28 @@ how the failure was written, so it really can drop the line that matters.
 ## Results
 
 ```
-pipelinemd eval — 62 cases (62 authored)
+pipelinemd eval — 69 cases (68 authored, 1 observed)
 
 class            cases   rule@1   class  evidence  exit code
 ---------------- ----- -------- ------- --------- ----------
 cache_artifact       8      7/7     7/8       8/8        8/8
-ci_vars              8      8/8     8/8       8/8        8/8
+ci_vars             11    11/11   11/11     11/11      11/11
 flaky                9      8/8     5/9       9/9        9/9
 image_pull          10    10/10    9/10     10/10      10/10
-runner              10    10/10   10/10     10/10      10/10
-test                 9      6/6     6/9       9/9        9/9
+runner              11    11/11   11/11     11/11      11/11
+test                12      8/8    8/12     12/12      12/12
 yaml                 8      6/6     6/8       8/8        8/8
 ---------------- ----- -------- ------- --------- ----------
-overall             62    55/55   51/62     62/62      62/62
+overall             69    61/61   57/69     69/69      69/69
 
-rule@1 100.0%  ·  class 82.3%  ·  evidence 100.0%  ·  exit code 100.0%
+rule@1 100.0%  ·  class 82.6%  ·  evidence 100.0%  ·  exit code 100.0%
 
 Class accuracy by confidence
-  high       39/43   91%
+  high       45/49   92%
   medium       9/9  100%
-  low         3/10   30%  needs human review
+  low         3/11   27%  needs human review
 
-Known gaps — no rule covers these (7)
+Known gaps — no rule covers these (8)
   yaml-yamllint-indentation       correctly silent
   yaml-empty-variable-expansion   correctly silent
   artifact-too-large              correctly silent
@@ -57,22 +57,7 @@ Known gaps — no rule covers these (7)
   test-vitest-failure             correctly silent
   test-phpunit-failure            correctly silent
   flaky-gitlab-502                correctly silent
-
-Class misses (11)
-  yaml-yamllint-indentation       labelled yaml — got unclassified (no rule fired)
-  yaml-empty-variable-expansion   labelled yaml — got unclassified (no rule fired)
-  imagepull-registry-unauthorized labelled image_pull — got ci_vars (docker.push-denied maps to ci_vars)
-  artifact-too-large              labelled cache_artifact — got unclassified (no rule fired)
-  test-rspec-failure              labelled test — got unclassified (no rule fired)
-  test-vitest-failure             labelled test — got unclassified (no rule fired)
-  test-phpunit-failure            labelled test — got unclassified (no rule fired)
-  flaky-tls-unknown-authority     labelled flaky — got runner (net.tls is not transient by nature, so only retry history could make it flaky, and the corpus carries none)
-  flaky-runner-lost               labelled flaky — got runner (runner.system-failure is not transient by nature, so only retry history could make it flaky, and the corpus carries none)
-  flaky-test-passes-on-retry      labelled flaky — got test (test.jest-failed is not transient by nature, so only retry history could make it flaky, and the corpus carries none)
-  flaky-gitlab-502                labelled flaky — got unclassified (no rule fired)
-
-Every case is authored, not observed. These numbers are a regression
-signal, not a measurement of real-world accuracy — see corpus/README.md.
+  test-gha-pip-missing-readme     correctly silent
 ```
 
 ## What the first run found, and what fixing it did
@@ -456,8 +441,9 @@ be a report rather than a guard.
 
 Four thresholds, set in the [Makefile](../Makefile):
 
-**`MIN_RULE_ACCURACY = 0.92`.** Raised from 0.85 now that rule@1 is 55/55: 0.92
-is 51/55, so the build fails on the fifth regression. The headroom is still
+**`MIN_RULE_ACCURACY = 0.92`.** Raised from 0.85 when rule@1 reached 55/55. It
+is 61/61 since the GitHub Actions cases (#50), and 0.92 is 57/61, so the build
+fails on the fifth regression. The headroom is still
 deliberate, for the same reason as before — the corpus is meant to grow with
 `observed` traces, which will be harder than the authored ones, and a gate that
 goes red the moment someone commits a real failing log discourages the
@@ -471,8 +457,8 @@ traces will eventually push the rate under this floor; the right response is to
 lower it in a commit that says why, so the number moves in review rather than
 silently.
 
-**`MIN_CLASS_ACCURACY = 0.78`.** Class is 51/62 today; 0.78 is 49/62, so the
-build fails on the third regression. Of the four metrics this is the one with
+**`MIN_CLASS_ACCURACY = 0.78`.** Class is 57/69 today; 0.78 is 54/69, so the
+build fails on the fourth regression. Of the four metrics this is the one with
 the sharpest downside: the class selects the fix type, `yaml_patch` is what
 #24's MR generator acts on, and a mapping change that quietly regresses
 classification would otherwise move a printed number and fail nothing. It
@@ -497,4 +483,4 @@ floor is lowered in a commit that names the case
 a rule that starts firing on one moves *no number at all* — `--min-rule-accuracy`
 cannot see it. It is also the worst thing the catalog can do: producing a
 confident wrong answer where it previously had the good sense to stay silent.
-All seven gaps are correctly silent today, and that is gated exactly.
+All eight gaps are correctly silent today, and that is gated exactly.

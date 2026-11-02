@@ -3,8 +3,9 @@
 [![CI](https://github.com/rbalukja15/pipelinemd/actions/workflows/ci.yml/badge.svg)](https://github.com/rbalukja15/pipelinemd/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/rbalukja15/pipelinemd/blob/main/LICENSE)
 
-**GitLab CI/CD failure doctor** — takes a failed pipeline, works out what
-actually broke, and tells you how to fix it.
+**CI failure doctor for GitLab CI and GitHub Actions** — takes a failed
+pipeline or workflow run, works out what actually broke, and tells you how to
+fix it.
 
 A failed job's log is a terminal recording, not a report. It can run to tens of
 thousands of lines, most of them progress bars that rewrote themselves five
@@ -14,11 +15,11 @@ pipelinemd does two things about that:
 1. **A deterministic distiller** replays the trace the way a terminal would,
    strips the noise, scores every line for failure-likeness, and keeps only the
    regions that explain the outcome — then matches them against a catalog of
-   **59 known CI failure signatures**, each with a real fix.
+   **64 known CI failure signatures**, each with a real fix.
    Every report is placed in one of seven **v1 failure classes** — `yaml`,
    `ci_vars`, `image_pull`, `cache_artifact`, `test`, `runner`, `flaky` — with
-   the kind of fix it wants. Flaky comes from GitLab's retry history, not from
-   a guess: if another attempt of the same job passed on the same commit, it
+   the kind of fix it wants. Flaky comes from the CI's own retry history, not
+   from a guess: if another attempt of the same job passed on the same commit, it
    says so.
 2. **An optional Claude diagnosis** reads only that distilled evidence and
    names the root cause, separating the actual fault from its fallout — and
@@ -126,6 +127,36 @@ For a self-managed instance, set `PIPELINEMD_GITLAB_URL` or pass `--gitlab-url`;
 a URL on any other host is fetched without the token. The reasoning is in
 [ADR-0002](https://github.com/rbalukja15/pipelinemd/blob/main/docs/adr/0002-gitlab-access.md).
 
+### Diagnose a failed GitHub Actions run
+
+```bash
+pipelinemd diagnose https://github.com/acme/web/actions/runs/41432307443          # the failed jobs
+pipelinemd diagnose https://github.com/acme/web/actions/runs/41432307443/attempts/1
+pipelinemd diagnose https://github.com/acme/web/actions/runs/41432307443/job/125233618223
+pipelinemd diagnose --repo acme/web --run 41432307443
+```
+
+The report has the same shape as GitLab's: classification, evidence, retry
+history and cost. A job that failed on one attempt of a run and passed on a
+re-run is classified `flaky`. A run's failed and timed-out jobs come first;
+cancelled ones are offered only when nothing else failed, since a `fail-fast`
+matrix or `cancel-in-progress` cancels them as fallout.
+
+GitHub serves job logs only with a token, even for public repositories, so one
+is required: `--token`, `$GH_TOKEN` or `$GITHUB_TOKEN` (`$PIPELINEMD_TOKEN` is
+GitLab's and is never sent to GitHub). It needs read access to Actions. As for
+GitLab, a token from the environment only goes to its own instance: github.com,
+`$GITHUB_SERVER_URL` inside Actions, or `$PIPELINEMD_GITHUB_URL`. For GitHub
+Enterprise Server pass `--github-url https://HOST`.
+
+The rule catalog was written against GitLab jobs. Most tool signatures (npm,
+pip, Docker, git, network) fire the same on GitHub logs, and five rules are
+GitHub's own: the workflow token's permissions, a required action input left
+empty, a job or step timeout, a cancelled run, and PyPI trusted publishing.
+Rules about gitlab-runner stay silent on GitHub logs, but some shared rules
+still word their fixes for GitLab (a fix may name `.gitlab-ci.yml`); the
+Claude layer is told which CI it is reading. `--open-mr` is GitLab-only.
+
 ### Distil a log you already have — fully offline
 
 ```bash
@@ -142,21 +173,22 @@ pasting it anywhere.
 make eval
 ```
 
-Runs the distiller and rule engine over 62 labelled traces in [`corpus/`](https://github.com/rbalukja15/pipelinemd/blob/main/corpus/README.md)
+Runs the distiller and rule engine over 69 labelled traces (62 GitLab, 7 GitHub Actions) in [`corpus/`](https://github.com/rbalukja15/pipelinemd/blob/main/corpus/README.md)
 and reports rule@1, class accuracy, evidence hit rate and exit-code accuracy
 per failure class. Offline and deterministic. Today:
 
 | Metric | Result | What it asks |
 | --- | --- | --- |
-| rule@1 | **55/55** (100%) | Did the expected rule rank first? Over the 55 cases a rule covers. |
-| class | **51/62** (82.3%) | Was the failure put in its labelled v1 class? Over every case. |
-| evidence | **62/62** (100%) | Did the line a human would point at survive into the excerpt? |
-| exit code | **62/62** (100%) | Was the runner's verdict read correctly? |
-| known gaps | **7/7** silent | Where no rule covers the failure, did the catalog stay quiet? |
+| rule@1 | **61/61** (100%) | Did the expected rule rank first? Over the 61 cases a rule covers. |
+| class | **57/69** (82.6%) | Was the failure put in its labelled v1 class? Over every case. |
+| evidence | **69/69** (100%) | Did the line a human would point at survive into the excerpt? |
+| exit code | **69/69** (100%) | Was the runner's verdict read correctly? |
+| known gaps | **8/8** silent | Where no rule covers the failure, did the catalog stay quiet? |
 
-Class accuracy is 91% when the report says high confidence and 30% when it
-says low, which is why low is sent to human review. Every case is authored,
-so these are a regression signal, not a measurement of real-world accuracy.
+Class accuracy is 92% when the report says high confidence and 27% when it
+says low, which is why low is sent to human review. All but one case are
+authored, so these are a regression signal, not a measurement of real-world
+accuracy.
 Results and their caveats: [docs/evaluation.md](https://github.com/rbalukja15/pipelinemd/blob/main/docs/evaluation.md).
 For a real log, see [pipelinemd run on its own CI](https://github.com/rbalukja15/pipelinemd/blob/main/docs/dogfood.md):
 it kept the cause in the excerpt, and exposed a rule that was too broad, now fixed.
@@ -174,7 +206,7 @@ anything.
 ### Browse the rule catalog
 
 ```bash
-pipelinemd rules                        # all 59, grouped by category
+pipelinemd rules                        # all 64, grouped by category
 pipelinemd rules --category dependency
 pipelinemd rules --search docker
 pipelinemd explain npm.eresolve         # one rule in full, patterns included
@@ -232,6 +264,36 @@ diagnose:
 ```
 
 A ready-made job is in [`examples/gitlab-ci-diagnose.yml`](https://github.com/rbalukja15/pipelinemd/blob/main/examples/gitlab-ci-diagnose.yml).
+
+### Inside GitHub Actions
+
+With no target, inside a workflow run it diagnoses that run and attempt. Give
+the job `permissions: actions: read` and pass the token:
+
+```yaml
+  pipelinemd:
+    needs: [build, test]
+    if: failure()
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - run: pip install 'pipelinemd[llm]'
+      - env:
+          GITHUB_TOKEN: ${{ github.token }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          pipelinemd diagnose --all-jobs -o diagnosis.md
+          cat diagnosis.md >> "$GITHUB_STEP_SUMMARY"
+```
+
+[`examples/github-actions-diagnose.yml`](https://github.com/rbalukja15/pipelinemd/blob/main/examples/github-actions-diagnose.yml)
+also has a `workflow_run` version that watches another workflow without
+changing it.
 
 ### Fixing the pipeline file with a merge request (opt-in)
 
@@ -318,7 +380,7 @@ pipelines accordingly.
 | --- | --- |
 | `0` | A report was produced. |
 | `2` | Usage error — bad URL, missing argument, unknown rule. |
-| `3` | GitLab error — unreachable, unauthorised, not found. |
+| `3` | API error (GitLab or GitHub) — unreachable, unauthorised, not found, rate limited. |
 | `4` | Nothing to diagnose — the pipeline has no failed jobs. |
 
 A failed Claude call is **not** fatal: pipelinemd warns on stderr and reports

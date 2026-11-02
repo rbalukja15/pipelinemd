@@ -1,0 +1,104 @@
+﻿2026-10-28T14:20:03.1200000Z Current runner version: '2.336.0'
+2026-10-28T14:20:03.2570000Z ##[group]Runner Image Provisioner
+2026-10-28T14:20:03.3940000Z Hosted Compute Agent
+2026-10-28T14:20:03.5310000Z Version: 20261021.601
+2026-10-28T14:20:03.6680000Z Commit: 8c1d2f6a0e7b4c3d9a5f1e2b6c7d8e9f0a1b2c3d
+2026-10-28T14:20:03.8050000Z Build Date: 2026-10-20T22:14:03Z
+2026-10-28T14:20:03.9420000Z Worker ID: {7f4e2a1b-3c5d-4e6f-8a9b-0c1d2e3f4a5b}
+2026-10-28T14:20:04.0790000Z Azure Region: eastus2
+2026-10-28T14:20:04.2160000Z ##[endgroup]
+2026-10-28T14:20:04.3530000Z ##[group]Operating System
+2026-10-28T14:20:04.4900000Z Ubuntu
+2026-10-28T14:20:04.6270000Z 24.04.3
+2026-10-28T14:20:04.7640000Z LTS
+2026-10-28T14:20:04.9010000Z ##[endgroup]
+2026-10-28T14:20:05.0380000Z ##[group]Runner Image
+2026-10-28T14:20:05.1750000Z Image: ubuntu-24.04
+2026-10-28T14:20:05.3120000Z Version: 20261026.124.1
+2026-10-28T14:20:05.4490000Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20261026.124/images/ubuntu/Ubuntu2404-Readme.md
+2026-10-28T14:20:05.5860000Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20261026.124
+2026-10-28T14:20:05.7230000Z ##[endgroup]
+2026-10-28T14:20:05.8600000Z ##[group]GITHUB_TOKEN Permissions
+2026-10-28T14:20:05.9970000Z Contents: read
+2026-10-28T14:20:06.1340000Z Metadata: read
+2026-10-28T14:20:06.2710000Z ##[endgroup]
+2026-10-28T14:20:06.4080000Z Secret source: Actions
+2026-10-28T14:20:06.5450000Z Prepare workflow directory
+2026-10-28T14:20:06.6820000Z Prepare all required actions
+2026-10-28T14:20:06.8190000Z Getting action download info
+2026-10-28T14:20:06.9560000Z Download action repository 'actions/checkout@v5' (SHA:360258ac97fd2705d874420c91410b56df238c12)
+2026-10-28T14:20:07.0930000Z Download action repository 'actions/setup-python@v6' (SHA:e9e5b8156b647a664664bcb483f350c3c6c8f812)
+2026-10-28T14:20:07.2300000Z Complete job name: integration
+2026-10-28T14:20:07.3670000Z ##[group]Run actions/checkout@v5
+2026-10-28T14:20:07.5040000Z with:
+2026-10-28T14:20:07.6410000Z   repository: acme/shop
+2026-10-28T14:20:07.7780000Z   token: ***
+2026-10-28T14:20:07.9150000Z   ssh-strict: true
+2026-10-28T14:20:08.0520000Z   ssh-user: git
+2026-10-28T14:20:08.1890000Z   persist-credentials: true
+2026-10-28T14:20:08.3260000Z   clean: true
+2026-10-28T14:20:08.4630000Z   fetch-depth: 1
+2026-10-28T14:20:08.6000000Z ##[endgroup]
+2026-10-28T14:20:08.7370000Z Syncing repository: acme/shop
+2026-10-28T14:20:08.8740000Z ##[group]Getting Git version info
+2026-10-28T14:20:09.0110000Z Working directory is '/home/runner/work/shop/shop'
+2026-10-28T14:20:09.1480000Z [command]/usr/bin/git version
+2026-10-28T14:20:09.2850000Z git version 2.51.1
+2026-10-28T14:20:09.4220000Z ##[endgroup]
+2026-10-28T14:20:09.5590000Z Deleting the contents of '/home/runner/work/shop/shop'
+2026-10-28T14:20:09.6960000Z ##[group]Fetching the repository
+2026-10-28T14:20:09.8330000Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +4f2a9c1e7b3d5f60a8c2e4b6d8f0a2c4e6b8d0f2:refs/remotes/origin/main
+2026-10-28T14:20:09.9700000Z ##[endgroup]
+2026-10-28T14:20:10.1070000Z ##[group]Checking out the ref
+2026-10-28T14:20:10.2440000Z [command]/usr/bin/git checkout --progress --force -B main refs/remotes/origin/main
+2026-10-28T14:20:10.3810000Z Switched to a new branch 'main'
+2026-10-28T14:20:10.5180000Z branch 'main' set up to track 'origin/main'.
+2026-10-28T14:20:10.6550000Z ##[endgroup]
+2026-10-28T14:20:10.7920000Z [command]/usr/bin/git log -1 --format=%H
+2026-10-28T14:20:10.9290000Z 4f2a9c1e7b3d5f60a8c2e4b6d8f0a2c4e6b8d0f2
+2026-10-28T14:20:11.0660000Z ##[group]Run actions/setup-python@v6
+2026-10-28T14:20:11.2030000Z with:
+2026-10-28T14:20:11.3400000Z   python-version: 3.12
+2026-10-28T14:20:11.4770000Z   check-latest: false
+2026-10-28T14:20:11.6140000Z   update-environment: true
+2026-10-28T14:20:11.7510000Z   allow-prereleases: false
+2026-10-28T14:20:11.8880000Z ##[endgroup]
+2026-10-28T14:20:12.0250000Z ##[group]Installed versions
+2026-10-28T14:20:12.1620000Z Successfully set up CPython (3.12.12)
+2026-10-28T14:20:12.2990000Z ##[endgroup]
+2026-10-28T14:20:12.4360000Z ##[group]Run pip install -r requirements.txt
+2026-10-28T14:20:12.5730000Z pip install -r requirements.txt
+2026-10-28T14:20:12.7100000Z shell: /usr/bin/bash -e {0}
+2026-10-28T14:20:12.8470000Z ##[endgroup]
+2026-10-28T14:20:12.9840000Z Collecting Django==5.2.7 (from -r requirements.txt (line 1))
+2026-10-28T14:20:13.1210000Z Successfully installed Django-5.2.7 asgiref-3.10.0 celery-5.5.3 pytest-8.4.2 pytest-django-4.11.1 redis-6.4.0 sqlparse-0.5.3
+2026-10-28T14:20:13.2580000Z ##[group]Run python -m pytest -x tests/integration
+2026-10-28T14:20:13.3950000Z python -m pytest -x tests/integration
+2026-10-28T14:20:13.5320000Z shell: /usr/bin/bash -e {0}
+2026-10-28T14:20:13.6690000Z env:
+2026-10-28T14:20:13.8060000Z   CELERY_BROKER_URL: redis://localhost:6379/0
+2026-10-28T14:20:13.9430000Z ##[endgroup]
+2026-10-28T14:20:14.0800000Z ============================= test session starts ==============================
+2026-10-28T14:20:14.2170000Z platform linux -- Python 3.12.12, pytest-8.4.2, pluggy-1.6.0
+2026-10-28T14:20:14.3540000Z django: version: 5.2.7, settings: shop.settings.test (from ini)
+2026-10-28T14:20:14.4910000Z rootdir: /home/runner/work/shop/shop
+2026-10-28T14:20:14.6280000Z configfile: pytest.ini
+2026-10-28T14:20:14.7650000Z plugins: django-4.11.1
+2026-10-28T14:20:14.9020000Z collected 48 items
+2026-10-28T14:20:15.0390000Z 
+2026-10-28T14:20:15.1760000Z tests/integration/test_checkout.py ........                              [ 16%]
+2026-10-28T14:20:15.3130000Z tests/integration/test_invoices.py ...........                           [ 39%]
+2026-10-28T14:20:15.4500000Z tests/integration/test_reminders.py ..
+2026-10-28T14:20:15.5870000Z ##[error]The job running on runner GitHub Actions 1000006218 has exceeded the maximum execution time of 15 minutes.
+2026-10-28T14:20:15.7240000Z ##[error]The operation was canceled.
+2026-10-28T14:20:15.8610000Z Post job cleanup.
+2026-10-28T14:20:15.9980000Z [command]/usr/bin/git version
+2026-10-28T14:20:16.1350000Z git version 2.51.1
+2026-10-28T14:20:16.2720000Z Temporarily overriding HOME='/home/runner/work/_temp/0b6e2f4a-1c3d-4e5f-a6b7-c8d9e0f1a2b3' before making global git config changes
+2026-10-28T14:20:16.4090000Z Adding repository directory to the temporary git global config as a safe directory
+2026-10-28T14:20:16.5460000Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/shop/shop
+2026-10-28T14:20:16.6830000Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-10-28T14:20:16.8200000Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-10-28T14:20:16.9570000Z http.https://github.com/.extraheader
+2026-10-28T14:20:17.0940000Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-10-28T14:20:17.2310000Z Cleaning up orphan processes

@@ -19,7 +19,7 @@ def distill(
     max_lines: int = DEFAULT_MAX_LINES,
     tail_lines: int = DEFAULT_TAIL_LINES,
 ) -> DistilledLog:
-    """Reduce a raw gitlab-runner trace to the evidence that explains it.
+    """Reduce a raw job log (gitlab-runner or GitHub Actions) to the evidence that explains it.
 
     Pure and offline: the same trace always distils to the same result, which
     is what makes the output safe to diff in tests and cheap to cache.
@@ -51,4 +51,5 @@ def distill(
             evidence_lines=evidence_lines,
             evidence_chars=evidence_chars,
         ),
+        source=cleaned.source,
     )

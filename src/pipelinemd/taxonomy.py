@@ -99,6 +99,11 @@ RULE_CLASS: dict[str, FailureClass] = {
     "gitlab.token-denied": _CI_VARS,
     "npm.registry-auth": _CI_VARS,
     "kube.forbidden": _CI_VARS,
+    # Often a `permissions:` edit in the workflow, but not on a fork's pull
+    # request or under a read-only repository default, so not yaml.
+    "github.token-permissions": _CI_VARS,
+    "pypi.trusted-publisher": _CI_VARS,
+    "actions.input-missing": _CI_VARS,  # usually an unset secret
     # Named for push, and a push denial is a credential's scope. The rule also
     # matches `unauthorized: authentication required`, which registries return
     # for pulls too - a catalog precision problem, recorded as an eval finding.
@@ -151,6 +156,8 @@ RULE_CLASS: dict[str, FailureClass] = {
     "runner.no-space": _RUNNER,
     "runner.oom-killed": _RUNNER,
     "runner.canceled": _RUNNER,
+    "actions.timeout": _RUNNER,
+    "actions.canceled": _RUNNER,
     "node.heap-oom": _RUNNER,
     "gradle.daemon-lost": _RUNNER,
     # An unknown CA fails on every run, so it is not flaky. The fix is the

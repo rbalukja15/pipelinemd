@@ -20,6 +20,8 @@ _RUNNER_DOCS = "https://docs.gitlab.com/ci/runners/"
 _DOCKER_DOCS = "https://docs.gitlab.com/ci/docker/using_docker_build/"
 _CACHE_DOCS = "https://docs.gitlab.com/ci/caching/"
 _ARTIFACT_DOCS = "https://docs.gitlab.com/ci/jobs/job_artifacts/"
+_ACTIONS_DOCS = "https://docs.github.com/actions/"
+_GITHUB = ("github",)
 
 RUNNER_RULES: tuple[Rule, ...] = (
     Rule(
@@ -1270,6 +1272,9 @@ CLOUD_NETWORK_RULES: tuple[Rule, ...] = (
         id="gitlab.token-denied",
         title="GitLab rejected the token",
         category=Category.AUTH,
+        # A bare 401 or 403 on GitHub is curl or npm, not GitLab, and this
+        # rule's fixes would point at the wrong server.
+        sources=("gitlab",),
         patterns=(
             r"HTTP Basic: Access denied",
             r"401 Unauthorized",
@@ -1291,6 +1296,124 @@ CLOUD_NETWORK_RULES: tuple[Rule, ...] = (
     ),
 )
 
+# Failures only GitHub Actions prints. Matched only on GitHub logs, so a GitLab
+# job quoting one of these messages is not mistaken for the runner's verdict.
+GITHUB_ACTIONS_RULES: tuple[Rule, ...] = (
+    Rule(
+        id="github.token-permissions",
+        title="The workflow token lacks a permission",
+        category=Category.AUTH,
+        patterns=(r"Resource not accessible by integration",),
+        confidence=Confidence.HIGH,
+        sources=_GITHUB,
+        explanation=(
+            "A call to the GitHub API with the workflow's `GITHUB_TOKEN` was refused because "
+            "the token does not carry the permission the call needs. The token's scopes come "
+            "from the workflow's `permissions:` block, or the repository's default when there "
+            "is none, and pull requests from forks always get a read-only token."
+        ),
+        fixes=(
+            "Grant the missing scope in the workflow or job: `permissions:` with, for example, "
+            "`contents: write`, `pull-requests: write` or `packages: write`.",
+            "Check Settings → Actions → General → Workflow permissions; a read-only default "
+            "applies wherever `permissions:` is not set.",
+            "On a pull request from a fork the token stays read-only; move the write to a "
+            "`workflow_run` workflow, or use a token of your own from a secret.",
+        ),
+        docs=(
+            "https://docs.github.com/actions/security-for-github-actions/security-guides/"
+            "automatic-token-authentication",
+        ),
+    ),
+    Rule(
+        id="pypi.trusted-publisher",
+        title="PyPI found no trusted publisher for this workflow",
+        category=Category.AUTH,
+        patterns=(r"invalid-publisher", r"Trusted publishing exchange failure"),
+        confidence=Confidence.HIGH,
+        explanation=(
+            "The publish step exchanged the CI provider's identity token for a PyPI upload "
+            "token, and PyPI refused: no trusted publisher on the project matches the "
+            "repository, the workflow file, or the environment the job ran in."
+        ),
+        fixes=(
+            "Compare the project's trusted publisher on PyPI (Manage → Publishing) with the "
+            "job: owner, repository, workflow file name and environment must all match.",
+            "A job that uses `environment:` must name the same environment on PyPI, and the "
+            "environment's branch rules must allow the ref that ran.",
+            "The job needs permission to request an identity token (`id-token: write` on "
+            "GitHub Actions).",
+        ),
+        docs=("https://docs.pypi.org/trusted-publishers/troubleshooting/",),
+    ),
+    Rule(
+        id="actions.input-missing",
+        title="An action's required input was empty",
+        category=Category.CONFIG,
+        patterns=(r"Input required and not supplied: \S+",),
+        confidence=Confidence.HIGH,
+        sources=_GITHUB,
+        explanation=(
+            "An action was called without a value for an input it requires. When the "
+            "workflow passes `${{ secrets.NAME }}`, an unset secret is the usual cause: it "
+            "expands to an empty string, and forks and Dependabot runs get no secrets at all."
+        ),
+        fixes=(
+            "Check the step's `with:` names the input the error names.",
+            "If it comes from a secret, confirm the secret exists in this repository or "
+            "environment (Settings → Secrets and variables → Actions).",
+            "Dependabot runs read Dependabot secrets, not Actions secrets; add it there too.",
+        ),
+        docs=(_ACTIONS_DOCS,),
+    ),
+    Rule(
+        id="actions.timeout",
+        title="Job or step exceeded its time limit",
+        category=Category.RUNNER,
+        patterns=(
+            r"has exceeded the maximum execution time of \d+ minutes",
+            r"^The action has timed out\.",
+        ),
+        confidence=Confidence.HIGH,
+        sources=_GITHUB,
+        explanation=(
+            "GitHub stopped the job, or one step, because it ran past `timeout-minutes`. Jobs "
+            "default to 360 minutes, so a timeout below that was set in the workflow."
+        ),
+        fixes=(
+            "Find which step hung - compare step durations in the distilled output.",
+            "Raise `timeout-minutes` on the job or the step if the work really takes longer.",
+            "If a step waits on input, add a non-interactive flag (`-y`, `--no-input`, `CI=true`).",
+        ),
+        docs=(
+            "https://docs.github.com/actions/writing-workflows/workflow-syntax-for-github-"
+            "actions#jobsjob_idtimeout-minutes",
+        ),
+    ),
+    Rule(
+        id="actions.canceled",
+        title="The run was canceled",
+        category=Category.RUNNER,
+        patterns=(r"^The operation was canceled\.",),
+        confidence=Confidence.MEDIUM,
+        sources=_GITHUB,
+        explanation=(
+            "The job was stopped from outside: someone cancelled the run, a newer run in the "
+            "same `concurrency` group replaced it, or a matrix sibling failed with `fail-fast`."
+        ),
+        fixes=(
+            "If a newer push superseded it, this is expected; look at the newer run.",
+            "A matrix job cancelled by `fail-fast` is fallout; diagnose the sibling that failed.",
+            "Set `cancel-in-progress: false` on a `concurrency` group whose runs must finish, "
+            "such as deploys.",
+        ),
+        docs=(
+            "https://docs.github.com/actions/writing-workflows/choosing-what-your-workflow-"
+            "does/control-the-concurrency-of-workflows-and-jobs",
+        ),
+    ),
+)
+
 ALL_RULES: tuple[Rule, ...] = (
     *RUNNER_RULES,
     *DOCKER_RULES,
@@ -1302,6 +1425,7 @@ ALL_RULES: tuple[Rule, ...] = (
     *CONFIG_RULES,
     *SHELL_RULES,
     *CLOUD_NETWORK_RULES,
+    *GITHUB_ACTIONS_RULES,
 )
 
 
