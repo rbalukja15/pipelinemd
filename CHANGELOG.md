@@ -36,6 +36,10 @@ How a section becomes a release is in [docs/releasing.md](docs/releasing.md).
   existing branch or merges. Without the flag nothing is written
   ([#24](https://github.com/rbalukja15/pipelinemd/issues/24),
   [#25](https://github.com/rbalukja15/pipelinemd/issues/25)).
+- `AGENTS.md` at the repository root sets out how changes are made: the
+  Makefile targets, commit, branch and changelog conventions, the per-issue
+  workflow, and the product rules with the code that enforces each
+  ([#5](https://github.com/rbalukja15/pipelinemd/issues/5)).
 
 ### Changed
 

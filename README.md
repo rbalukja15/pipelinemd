@@ -369,6 +369,9 @@ suite fails until you do. Choose from what the failure *is*, and only use
 `flaky` if it is transient whatever the environment; anything that is merely
 often transient is flaky only when retry history says so.
 
+The repository's conventions, from commit messages to the rules a change must
+not weaken, are in [AGENTS.md](https://github.com/rbalukja15/pipelinemd/blob/main/AGENTS.md).
+
 ## License
 
 MIT — see [LICENSE](https://github.com/rbalukja15/pipelinemd/blob/main/LICENSE).
