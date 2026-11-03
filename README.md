@@ -9,7 +9,7 @@ fix it.
 
 ![pipelinemd diagnosing a job whose .gitlab-ci.yml names a stage that does not exist: the class, the fix, the matched rule and the evidence lines](https://raw.githubusercontent.com/rbalukja15/pipelinemd/main/docs/demo.gif)
 
-<sub>Rules only, offline, on the corpus trace `yaml-unknown-stage`. Read the case study: (link coming)</sub>
+<sub>Rules only, offline, on the corpus trace `yaml-unknown-stage`. Read the [case study](docs/case-study.md).</sub>
 
 A failed job's log is a terminal recording, not a report. It can run to tens of
 thousands of lines, most of them progress bars that rewrote themselves five

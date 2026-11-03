@@ -8,6 +8,12 @@ How a section becomes a release is in [docs/releasing.md](docs/releasing.md).
 
 ## [Unreleased]
 
+### Added
+
+- `docs/case-study.md`, a write-up of how pipelinemd works and how it is
+  measured, linked from the README under the demo
+  ([#27](https://github.com/rbalukja15/pipelinemd/issues/27)).
+
 ## [1.0.0] - 2026-11-03
 
 ### Added
