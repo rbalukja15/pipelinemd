@@ -654,7 +654,13 @@ def _diagnose_github(
             "Set $GH_TOKEN or $GITHUB_TOKEN (inside Actions: pass GITHUB_TOKEN with "
             "`permissions: actions: read`), or pass --token."
         )
-    client = GitHubClient(target.api_url, token, timeout=args.timeout)
+    # A rate-limit wait can last a minute; say so when someone is watching.
+    notify = (
+        (lambda message: print(f"pipelinemd: {message}", file=stderr, flush=True))
+        if getattr(stderr, "isatty", lambda: False)()
+        else None
+    )
+    client = GitHubClient(target.api_url, token, timeout=args.timeout, notify=notify)
     repository = target.repository
 
     jobs: list[dict[str, Any]]

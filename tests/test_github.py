@@ -20,7 +20,13 @@ from pipelinemd import cli
 from pipelinemd.cli import EXIT_GITLAB, EXIT_NOTHING, EXIT_OK, EXIT_USAGE, main
 from pipelinemd.config import CIContext, detect_ci, resolve_github_credentials
 from pipelinemd.distill import distill
-from pipelinemd.errors import GitHubAuthError, GitHubNotFoundError, RateLimitError, UsageError
+from pipelinemd.errors import (
+    GitHubAuthError,
+    GitHubError,
+    GitHubNotFoundError,
+    RateLimitError,
+    UsageError,
+)
 from pipelinemd.github import (
     GitHubClient,
     GitHubHttp,
@@ -216,6 +222,43 @@ def test_a_short_retry_after_is_honoured() -> None:
     )
     assert _http(server).get_json("repos/acme/shop") == {"id": 1}
     assert len(server.requests) == 2
+
+
+def test_a_rate_limit_wait_is_announced(monkeypatch: pytest.MonkeyPatch) -> None:
+    slept: list[float] = []
+    monkeypatch.setattr(time, "sleep", slept.append)
+    server = _Server(
+        {
+            "https://api.github.com/": [
+                (429, "{}", {"retry-after": "12"}),
+                (200, '{"id": 1}', {}),
+            ]
+        }
+    )
+    notes: list[str] = []
+    assert _http(server, notify=notes.append).get_json("repos/acme/shop") == {"id": 1}
+    assert slept == [12.0]
+    assert notes == ["waiting 12s for GitHub's rate limit to reset"]
+
+
+def test_a_next_page_on_another_host_is_not_followed() -> None:
+    """The token stays on its own instance even if a Link header points elsewhere."""
+    base = "https://api.github.com/repos/acme/shop/actions/runs/7/jobs"
+    server = _Server(
+        {
+            base: [
+                (
+                    200,
+                    json.dumps({"jobs": [{"id": 1}]}),
+                    {"Link": '<https://evil.example/steal?page=2>; rel="next"'},
+                )
+            ],
+        }
+    )
+    pages = _http(server).paginate("repos/acme/shop/actions/runs/7/jobs", "jobs")
+    with pytest.raises(GitHubError, match="another host"):
+        list(pages)
+    assert [url for url, _ in server.requests] == [f"{base}?per_page=100"]
 
 
 def test_a_plain_403_is_an_auth_error_and_404_not_found() -> None:

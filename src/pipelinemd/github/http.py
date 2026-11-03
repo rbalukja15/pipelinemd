@@ -15,7 +15,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
 from typing import Any
 
@@ -45,9 +45,12 @@ class GitHubHttp:
         timeout: float = DEFAULT_TIMEOUT,
         retries: int = DEFAULT_RETRIES,
         backoff: float = 1.0,
+        notify: Callable[[str], None] | None = None,
     ) -> None:
         self.api_url = api_url.rstrip("/")
         self.token = token
+        #: Told about waits long enough to look like a hang (rate limits).
+        self.notify = notify
         self.timeout = timeout
         self.retries = retries
         self.backoff = backoff
@@ -143,6 +146,8 @@ class GitHubHttp:
                 wait = self._rate_limit_wait(exc.code, headers)
                 if attempt == self.retries or (wait is None and exc.code not in RETRY_STATUSES):
                     self._raise_for_status(exc.code, body, url)
+                if wait is not None and wait >= 1 and self.notify is not None:
+                    self.notify(f"waiting {wait:.0f}s for GitHub's rate limit to reset")
                 time.sleep(wait if wait is not None else self.backoff * (2**attempt))
                 last_error = exc
             except (urllib.error.URLError, TimeoutError, OSError) as exc:
@@ -151,6 +156,10 @@ class GitHubHttp:
                 time.sleep(self.backoff * (2**attempt))
                 last_error = exc
         raise GitHubError(f"Giving up on {url} after {self.retries} retries: {last_error}")
+
+    def _same_origin(self, url: str) -> bool:
+        ours, theirs = urllib.parse.urlsplit(self.api_url), urllib.parse.urlsplit(url)
+        return (ours.scheme, ours.netloc.lower()) == (theirs.scheme, theirs.netloc.lower())
 
     @staticmethod
     def _json(body: str, url: str) -> Any:
@@ -185,3 +194,6 @@ class GitHubHttp:
             yield from items
             match = _NEXT.search(headers.get("link", ""))
             url = match.group(1) if match else None
+            if url is not None and not self._same_origin(url):
+                # The token goes only to its own instance, whatever a response says.
+                raise GitHubError(f"Refusing to follow a next page on another host: {url}")

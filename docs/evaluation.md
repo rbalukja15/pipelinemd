@@ -60,6 +60,15 @@ Known gaps — no rule covers these (8)
   test-gha-pip-missing-readme     correctly silent
 ```
 
+The 12 class misses are the eight known gaps above, which no rule covers and
+which therefore come out `unclassified`, plus four cases where the right rule
+fired and its class differs from the label. One of those is
+`imagepull-registry-unauthorized`, where `docker.push-denied` maps to
+`ci_vars`. The other three are `flaky` cases whose rule is not transient by
+nature and which carry no retry history. Of the seven GitHub Actions cases,
+the six with a rule are classified correctly. The seventh,
+`test-gha-pip-missing-readme`, is one of the gaps.
+
 ## What the first run found, and what fixing it did
 
 The harness was merged without tuning the catalog, on purpose: tuning rules

@@ -7,6 +7,7 @@ The method names follow `gitlab.client.GitLabClient` (`failed_jobs`,
 from __future__ import annotations
 
 import urllib.parse
+from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
@@ -61,9 +62,10 @@ class GitHubClient:
         *,
         timeout: float = DEFAULT_TIMEOUT,
         retries: int = DEFAULT_RETRIES,
+        notify: Callable[[str], None] | None = None,
     ) -> None:
         self.api_url = api_url.rstrip("/")
-        self.http = GitHubHttp(self.api_url, token, timeout=timeout, retries=retries)
+        self.http = GitHubHttp(self.api_url, token, timeout=timeout, retries=retries, notify=notify)
 
     @staticmethod
     def _repo(repository: str) -> str:
@@ -149,6 +151,10 @@ def retry_history(job: dict[str, Any], every_attempt: list[dict[str, Any]]) -> R
     Every attempt of a run builds the same commit, so a job that failed once
     and passed on a re-run is flaky by the same evidence GitLab's retries give.
     """
+    # Attempts are paired by job name because a job's id changes on every
+    # re-run and GitHub links attempts by nothing else. Matrix jobs are safe:
+    # their names carry the matrix values. Two jobs that share a name (calls
+    # of one reusable workflow, say) would have their histories merged.
     attempts = sorted(
         (other for other in every_attempt if other.get("name") == job.get("name")),
         key=lambda other: (other.get("run_attempt") or 0, other.get("id") or 0),
