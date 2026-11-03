@@ -107,6 +107,7 @@ def report_to_dict(report: Report) -> dict[str, Any]:
             "failure_reason": distilled.failure_reason,
             "runner": distilled.runner,
             "image": distilled.image,
+            "source": distilled.source,
             "commands": distilled.commands,
             "failing_section": (
                 distilled.failing_section.name if distilled.failing_section else None

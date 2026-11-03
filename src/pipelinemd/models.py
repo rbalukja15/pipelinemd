@@ -121,17 +121,20 @@ class TraceLine:
 
 @dataclass(frozen=True, slots=True)
 class Section:
-    """A ``section_start``/``section_end`` span emitted by gitlab-runner."""
+    """A span of the trace: a gitlab-runner section, or a GitHub Actions step."""
 
     name: str
     start_line: int
     end_line: int | None = None
     duration_s: float | None = None
+    #: A GitHub step closes even when it fails, so where the job died is said
+    #: outright rather than read from a section left open.
+    failed: bool = False
 
     @property
     def failed_open(self) -> bool:
-        """True when the section never closed - typically where the job died."""
-        return self.end_line is None
+        """True where the job died: a section that never closed, or the failed step."""
+        return self.end_line is None or self.failed
 
 
 @dataclass(frozen=True, slots=True)
@@ -194,6 +197,9 @@ class DistilledLog:
     runner: str | None = None
     image: str | None = None
     stats: DistillStats = field(default_factory=lambda: DistillStats(0, 0, 0, 0, 0))
+    #: Which CI wrote the log, read from the log itself: "gitlab", "github",
+    #: or "unknown" for text that carries neither's markers.
+    source: str = "unknown"
 
     def evidence_text(self) -> str:
         """The excerpt as plain text, with gap markers between blocks."""
@@ -245,6 +251,9 @@ class Rule:
     excludes: tuple[str, ...] = ()
     exit_codes: tuple[int, ...] = ()
     docs: tuple[str, ...] = ()
+    #: The log sources the rule applies to; empty means every source. A log
+    #: whose source is unknown is matched by every rule.
+    sources: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

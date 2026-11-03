@@ -147,6 +147,7 @@ def diagnose(
     effort: str = DEFAULT_EFFORT,
     max_tokens: int = DEFAULT_MAX_TOKENS,
     ci_config: str | None = None,
+    ci_config_path: str | None = None,
     client: Any | None = None,
 ) -> Diagnosis:
     """Ask Claude to name the root cause, as validated structured output.
@@ -155,7 +156,9 @@ def diagnose(
     unset and let the SDK build one.
     """
     anthropic_client = client if client is not None else _client(api_key)
-    user_message = build_user_message(job, distilled, hits, ci_config=ci_config)
+    user_message = build_user_message(
+        job, distilled, hits, ci_config=ci_config, ci_config_path=ci_config_path
+    )
 
     try:
         response = anthropic_client.messages.create(

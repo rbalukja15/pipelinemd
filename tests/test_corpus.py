@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 from pipelinemd.corpus import PROVENANCE, V1_CLASSES, CorpusCase, load_corpus
+from pipelinemd.distill.trace import detect_source
 from pipelinemd.errors import PipelinemdError
 from pipelinemd.rules import ALL_RULES
 
@@ -59,6 +60,12 @@ def test_marker_occurs_in_its_own_trace(case: CorpusCase) -> None:
 @pytest.mark.parametrize("case", CASES, ids=lambda case: case.id)
 def test_trace_looks_like_a_real_failed_job(case: CorpusCase) -> None:
     raw = case.read()
+    if detect_source(raw) == "github":
+        assert raw.startswith("\ufeff"), "a downloaded GitHub log starts with a BOM"
+        assert "Current runner version:" in raw
+        assert "##[error]" in raw
+        assert "-gha-" in case.id, "GitHub cases are named <class>-gha-<what>"
+        return
     assert "Running with gitlab-runner" in raw
     assert "ERROR: Job failed" in raw
 
@@ -69,6 +76,8 @@ def test_trace_carries_no_credential_shaped_text(case: CorpusCase) -> None:
     raw = case.read()
     for pattern in (
         r"\b(?:glpat|glrt|gldt)-[A-Za-z0-9_\-]{20,}",
+        r"\bgh[pousr]_[A-Za-z0-9]{16,}",
+        r"\bgithub_pat_[A-Za-z0-9_]{22,}",
         r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b",
         r"\beyJ[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}\.",
         r"-----BEGIN [A-Z ]*PRIVATE KEY-----",

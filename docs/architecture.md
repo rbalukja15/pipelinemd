@@ -24,11 +24,14 @@ local file ─┘                                                     │       
 | `gitlab/url.py` | Parse pasted pipeline/job URLs. Everything after `/-/` is the route; everything before it is the project path. |
 | `gitlab/http.py` | urllib + auth headers + bounded retries + page following. |
 | `gitlab/client.py` | The five REST calls we need, and the mapping to `JobRef`. |
+| `github/url.py` | Parse GitHub Actions run, attempt and job URLs; derive the API root (github.com or `/api/v3`). |
+| `github/http.py` | The same for GitHub: bearer token, `Link` pages, rate limits, and a token that never follows a log's redirect. |
+| `github/client.py` | Jobs, logs, attempts and the workflow file; the mapping to `JobRef` and retry history. |
 | `distill/ansi.py` | Replay the terminal: escapes, `\r`, `\b`. |
 | `distill/redact.py` | Mask credential shapes. Line-count preserving. |
 | `distill/trace.py` | Sections, timestamps, metadata, per-line attribution. |
 | `distill/extract.py` | Score lines, grow windows, spend the budget, collapse repeats. |
-| `rules/catalog.py` | 59 failure signatures with fixes. Data, not code. |
+| `rules/catalog.py` | 64 failure signatures with fixes. Data, not code. |
 | `rules/engine.py` | Apply the catalog, rank the hits. |
 | `taxonomy.py` | Place a failure in the v1 taxonomy, and pick its fix type. The rule-to-class table lives here. |
 | `assessment.py` | How far to trust an analysis: one confidence from every signal behind it, and when to send it to human review. |
@@ -134,7 +137,7 @@ both are in `test`.
 Two signals decide the class, and both are reproducible:
 
 - **The top rule's base class**, from one table in `taxonomy.py` covering all
-  59 rules, so the decisions can be reviewed side by side. A test fails if a
+  64 rules, so the decisions can be reviewed side by side. A test fails if a
   rule is added without an entry. Only the *top* rule counts: if it falls
   outside v1 the failure is unclassified, rather than falling through to a
   lower hit — which the engine has already ranked as a weaker explanation, and
@@ -322,10 +325,17 @@ anchored to text a tool actually prints, not paraphrases of it.
 **A new output format** is a function taking `Report` and returning `str`, plus
 a `--format` choice. `render/json_out.py` is the smallest example.
 
-**A new source** (GitHub Actions, Jenkins) needs a client producing a raw trace
-and a `JobRef`. The distiller's GitLab-specific parts are the `section_start`
-markers and the `ERROR: Job failed` verdict; everything else is generic
-terminal handling that applies to any CI log. GitHub Actions logs are already
-read: their verdict and post-job steps are recognised, but their `##[group]`
-steps are not yet, and there is no client for them
-([#50](https://github.com/rbalukja15/pipelinemd/issues/50)).
+**A new source** (Jenkins, say) needs a client producing a raw trace and a
+`JobRef`, the way `github/` does for GitHub Actions
+([#50](https://github.com/rbalukja15/pipelinemd/issues/50)). `clean_trace`
+detects a log's source once from its own markers and records it on
+`DistilledLog.source`, so an offline `distill` of a downloaded log gets the same
+structure. For GitHub that means each line's timestamp is read for step
+durations before it is stripped, every `##[group]Run …` header opens a step
+section up to the next one, the step holding the last `##[error]` is the
+failing one, and what runs after the verdict is the post-job section the
+engine discounts. `##[error]` and `##[warning]` prefixes are dropped for rule
+matching, so an anchored pattern sees the same text on both CIs. A rule can
+name the sources it applies to (`Rule.sources`): the five GitHub rules match
+only GitHub logs, and `gitlab.token-denied` only GitLab's. A log of unknown
+source gets every rule.

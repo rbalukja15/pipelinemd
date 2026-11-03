@@ -31,7 +31,7 @@ FROM python:${PYTHON_VERSION}-slim
 ARG VERSION=dev
 
 LABEL org.opencontainers.image.title="pipelinemd" \
-      org.opencontainers.image.description="GitLab CI/CD failure doctor - diagnoses failed pipelines and suggests fixes." \
+      org.opencontainers.image.description="CI failure doctor for GitLab CI and GitHub Actions - diagnoses failed pipelines and suggests fixes." \
       org.opencontainers.image.source="https://github.com/rbalukja15/pipelinemd" \
       org.opencontainers.image.licenses="MIT" \
       org.opencontainers.image.version="${VERSION}"

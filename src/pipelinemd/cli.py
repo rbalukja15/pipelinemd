@@ -1,6 +1,6 @@
 """Command line interface.
 
-pipelinemd diagnose <url>      diagnose a failed pipeline or job
+pipelinemd diagnose <url>      diagnose a failed GitLab pipeline or job, or GitHub Actions run
 pipelinemd distill <file>      distil a saved trace, offline
 pipelinemd rules               list the rule catalog
 pipelinemd eval                score the rules against the corpus (--llm: the model too)
@@ -26,9 +26,12 @@ from .autofix import (
     open_fix_mr,
 )
 from .config import (
+    CIContext,
     detect_ci,
     resolve_anthropic_key,
     resolve_credentials,
+    resolve_github_credentials,
+    resolve_github_url,
     resolve_gitlab_url,
     same_instance,
     scope_credentials,
@@ -41,9 +44,17 @@ from .diagnose import diagnose as run_diagnosis
 from .diagnose.patch import PatchProposal, propose_patch
 from .distill import distill
 from .distill.extract import DEFAULT_MAX_LINES, DEFAULT_TAIL_LINES, DEFAULT_THRESHOLD
-from .errors import DiagnosisError, GitLabError, PipelinemdError, UsageError
+from .errors import ApiError, DiagnosisError, PipelinemdError, UsageError
 from .evaluate import eval_report_to_dict, format_report, run_eval
 from .evaluate_llm import format_llm_report, llm_report_to_dict, run_llm_eval
+from .github import (
+    GitHubClient,
+    GitHubTarget,
+    github_target_from_parts,
+    looks_like_github,
+    parse_github_target,
+)
+from .github import retry_history as github_retry_history
 from .gitlab import GitLabClient, Target, parse_target, rebase, target_from_parts
 from .gitlab.write import WriteClient
 from .models import Diagnosis, DistilledLog, JobRef, Report, RetryHistory, RuleHit
@@ -92,7 +103,10 @@ EVIDENCE_LIMIT_DEFAULT = 40
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="pipelinemd",
-        description="GitLab CI/CD failure doctor: distil a failed job's log and explain it.",
+        description=(
+            "CI failure doctor for GitLab CI and GitHub Actions: distil a failed job's log "
+            "and explain it."
+        ),
     )
     parser.add_argument("--version", action="version", version=f"pipelinemd {__version__}")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -156,26 +170,39 @@ def build_parser() -> argparse.ArgumentParser:
     # diagnose ------------------------------------------------------------
     diagnose_parser = subparsers.add_parser(
         "diagnose",
-        help="Diagnose a failed pipeline or job.",
+        help="Diagnose a failed pipeline, workflow run or job.",
         description=(
             "Fetch a failed job's trace, distil it, match the rule catalog, and "
             "(when a key is available) ask Claude for the root cause.\n\n"
-            "With no target, uses the surrounding pipeline's CI_PIPELINE_ID when "
-            "running inside GitLab CI."
+            "With no target, diagnoses the surrounding pipeline when running inside "
+            "GitLab CI (CI_PIPELINE_ID) or the surrounding run inside GitHub Actions "
+            "(GITHUB_RUN_ID)."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     diagnose_parser.add_argument(
         "target",
         nargs="?",
-        help="A GitLab pipeline or job URL.",
+        help="A GitLab pipeline or job URL, or a GitHub Actions run or job URL.",
     )
-    diagnose_parser.add_argument("--project", help="Project path, e.g. group/project.")
-    diagnose_parser.add_argument("--pipeline", type=int, help="Pipeline id.")
-    diagnose_parser.add_argument("--job", type=int, help="Job id.")
+    diagnose_parser.add_argument("--project", help="GitLab project path, e.g. group/project.")
+    diagnose_parser.add_argument("--pipeline", type=int, help="GitLab pipeline id.")
+    diagnose_parser.add_argument("--job", type=int, help="Job id (GitLab, or GitHub with --repo).")
     diagnose_parser.add_argument("--gitlab-url", help="GitLab instance URL.")
+    diagnose_parser.add_argument("--repo", help="GitHub repository, e.g. owner/name.")
+    diagnose_parser.add_argument("--run", type=int, help="GitHub Actions run id (with --repo).")
     diagnose_parser.add_argument(
-        "--token", help="GitLab token (else $GITLAB_TOKEN, $CI_JOB_TOKEN)."
+        "--attempt", type=int, help="GitHub run attempt (default: the latest)."
+    )
+    diagnose_parser.add_argument(
+        "--github-url", help="GitHub Enterprise Server URL (default: https://github.com)."
+    )
+    diagnose_parser.add_argument(
+        "--token",
+        help=(
+            "API token (else $GITLAB_TOKEN or $CI_JOB_TOKEN for GitLab, "
+            "$GH_TOKEN or $GITHUB_TOKEN for GitHub)."
+        ),
     )
     diagnose_parser.add_argument(
         "--from-file",
@@ -190,7 +217,7 @@ def build_parser() -> argparse.ArgumentParser:
     diagnose_parser.add_argument(
         "--with-ci-config",
         action="store_true",
-        help="Also fetch .gitlab-ci.yml and give it to the model.",
+        help="Also fetch the pipeline file (.gitlab-ci.yml, or the run's workflow) for the model.",
     )
     diagnose_parser.add_argument(
         "--no-llm",
@@ -474,8 +501,9 @@ def _resolve_target(args: argparse.Namespace) -> Target:
     context = detect_ci()
     if context is None:
         raise UsageError(
-            "Nothing to diagnose. Pass a pipeline or job URL, or --project with "
-            "--pipeline/--job, or run inside a GitLab CI job."
+            "Nothing to diagnose. Pass a pipeline, run or job URL, --project with "
+            "--pipeline/--job, --repo with --run/--job, or run inside a GitLab CI job "
+            "or a GitHub Actions run."
         )
     if args.pipeline or args.job:
         return target_from_parts(
@@ -491,6 +519,8 @@ def _maybe_diagnose(
     args: argparse.Namespace,
     ci_config: str | None,
     stderr: IO[str],
+    *,
+    ci_config_path: str | None = None,
 ) -> Report:
     """Attach an LLM diagnosis when possible; never let its absence be fatal."""
     if args.no_llm:
@@ -512,6 +542,7 @@ def _maybe_diagnose(
             model=args.model,
             effort=args.effort,
             ci_config=ci_config,
+            ci_config_path=ci_config_path,
         )
     except DiagnosisError as exc:
         stderr.write(f"note: Claude diagnosis unavailable ({exc}). Rules were still applied.\n")
@@ -543,7 +574,7 @@ def _retry_history(
             cache[pipeline_id] = client.list_pipeline_jobs(
                 project, pipeline_id, include_retried=True
             )
-        except GitLabError as exc:
+        except ApiError as exc:
             stderr.write(f"note: could not read retry history ({exc}); flaky detection skipped.\n")
             cache[pipeline_id] = []
     attempts = sorted(
@@ -553,6 +584,143 @@ def _retry_history(
     if not attempts:
         return None
     return RetryHistory(statuses=tuple(str(other.get("status") or "") for other in attempts))
+
+
+def _github_target(args: argparse.Namespace) -> GitHubTarget | None:
+    """A GitHub run or job to diagnose, or None when the target is GitLab's."""
+    if args.target:
+        return (
+            parse_github_target(args.target, args.github_url)
+            if looks_like_github(args.target)
+            else None
+        )
+    if args.repo:
+        if args.project or args.pipeline:
+            raise UsageError("--repo is GitHub's and --project/--pipeline GitLab's; pick one.")
+        return github_target_from_parts(
+            resolve_github_url(args.github_url),
+            args.repo,
+            run=args.run,
+            job=args.job,
+            attempt=args.attempt,
+        )
+    if args.run or args.attempt:
+        raise UsageError("--run and --attempt need --repo, or a GitHub Actions run URL.")
+    if args.project:
+        return None
+    context = detect_ci()
+    if context is None or context.provider != "github":
+        return None
+    return _github_context_target(context, args)
+
+
+def _github_context_target(context: CIContext, args: argparse.Namespace) -> GitHubTarget:
+    if args.job:
+        return github_target_from_parts(
+            context.server_url, context.project_path, job=args.job, api=context.api_url
+        )
+    if context.pipeline_id is None:
+        raise UsageError("Running in GitHub Actions but GITHUB_RUN_ID is not set.")
+    # Inside a re-run, diagnose that attempt, not whichever is latest by now.
+    return github_target_from_parts(
+        context.server_url,
+        context.project_path,
+        run=context.pipeline_id,
+        attempt=context.run_attempt,
+        api=context.api_url,
+    )
+
+
+def _diagnose_github(
+    target: GitHubTarget, args: argparse.Namespace, stdout: IO[str], stderr: IO[str]
+) -> int:
+    found = resolve_github_credentials(args.token)
+    instance = resolve_github_url(args.github_url)
+    token = found.token
+    if found.present and found.source != "--token" and not same_instance(target.web_url, instance):
+        # A token from the environment was issued by one instance; a pasted
+        # link must not collect it (ADR-0002, as for GitLab).
+        stderr.write(
+            f"note: not sending ${found.source} to {target.web_url}: it belongs to "
+            f"{instance}. Set PIPELINEMD_GITHUB_URL={target.web_url} if it is for "
+            "this instance, or pass --token.\n"
+        )
+        token = None
+    if not token:
+        # GitHub serves job logs only to an authenticated caller, public
+        # repositories included, so this fails before any request.
+        raise UsageError(
+            "GitHub only serves job logs with a token, even for public repositories. "
+            "Set $GH_TOKEN or $GITHUB_TOKEN (inside Actions: pass GITHUB_TOKEN with "
+            "`permissions: actions: read`), or pass --token."
+        )
+    # A rate-limit wait can last a minute; say so when someone is watching.
+    notify = (
+        (lambda message: print(f"pipelinemd: {message}", file=stderr, flush=True))
+        if getattr(stderr, "isatty", lambda: False)()
+        else None
+    )
+    client = GitHubClient(target.api_url, token, timeout=args.timeout, notify=notify)
+    repository = target.repository
+
+    jobs: list[dict[str, Any]]
+    if target.is_job:
+        jobs = [client.get_job(repository, target.id)]
+    else:
+        jobs = client.failed_jobs(repository, target.id, attempt=target.attempt)
+        if not jobs:
+            stderr.write(
+                f"No failed jobs in run {target.id} of {repository}. Nothing to diagnose.\n"
+            )
+            return EXIT_NOTHING
+        if not args.all_jobs and len(jobs) > 1:
+            others = ", ".join(str(job.get("name")) for job in jobs[1:])
+            stderr.write(
+                f"note: {len(jobs)} jobs failed; diagnosing '{jobs[0].get('name')}'. "
+                f"Use --all-jobs for the rest ({others}).\n"
+            )
+            jobs = jobs[:MAX_JOBS_DEFAULT]
+
+    runs: dict[int, dict[str, Any]] = {}
+    attempts: dict[int, list[dict[str, Any]]] = {}
+    reports: list[Report] = []
+    for job in jobs:
+        job_ref = client.job_ref(job, repository)
+        raw = client.get_trace(repository, int(job["id"]))
+        distilled = distill(
+            raw,
+            threshold=args.threshold,
+            max_lines=args.max_evidence_lines,
+            tail_lines=args.tail_lines,
+        )
+        run_id = job_ref.pipeline_id
+        retry = None
+        if run_id is not None:
+            if run_id not in attempts:
+                try:
+                    attempts[run_id] = client.list_run_jobs(repository, run_id, all_attempts=True)
+                except ApiError as exc:
+                    stderr.write(
+                        f"note: could not read retry history ({exc}); flaky detection skipped.\n"
+                    )
+                    attempts[run_id] = []
+            retry = github_retry_history(job, attempts[run_id])
+        report = Report(job=job_ref, distilled=distilled, hits=match_rules(distilled), retry=retry)
+        ci_config: str | None = None
+        ci_config_path: str | None = None
+        if args.with_ci_config and run_id is not None:
+            try:
+                run = runs.setdefault(run_id, client.get_run(repository, run_id))
+            except ApiError:
+                run = {}
+            ci_config_path = str(run.get("path") or "").partition("@")[0] or None
+            if ci_config_path and job_ref.sha:
+                ci_config = client.get_workflow_file(repository, ci_config_path, job_ref.sha)
+        report = _maybe_diagnose(report, args, ci_config, stderr, ci_config_path=ci_config_path)
+        reports.append(report)
+
+    _render(reports, args, stdout)
+    return EXIT_OK
 
 
 # ---------------------------------------------------------------------------
@@ -648,6 +816,12 @@ def cmd_diagnose(args: argparse.Namespace, stdout: IO[str], stderr: IO[str], std
         report = _maybe_diagnose(report, args, None, stderr)
         _render([report], args, stdout)
         return EXIT_OK
+
+    github_target = _github_target(args)
+    if github_target is not None:
+        if write_token is not None:
+            raise UsageError("--open-mr opens GitLab merge requests; it does not apply to GitHub.")
+        return _diagnose_github(github_target, args, stdout, stderr)
 
     target = _resolve_target(args)
     found = resolve_credentials(args.token)
@@ -1004,7 +1178,7 @@ def main(
     except UsageError as exc:
         err.write(f"error: {exc}\n")
         return EXIT_USAGE
-    except GitLabError as exc:
+    except ApiError as exc:
         err.write(f"error: {exc}\n")
         return EXIT_GITLAB
     except PipelinemdError as exc:

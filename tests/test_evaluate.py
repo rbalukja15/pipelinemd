@@ -80,7 +80,10 @@ def test_an_all_authored_corpus_says_so_in_the_report() -> None:
 
 def test_provenance_is_reported_not_collapsed() -> None:
     payload = eval_report_to_dict(REPORT)
-    assert payload["provenance"] == {"authored": len(REPORT.results)}
+    provenance = payload["provenance"]
+    assert isinstance(provenance, dict)
+    assert set(provenance) == {"authored", "observed"}
+    assert sum(provenance.values()) == len(REPORT.results)
 
 
 def test_report_names_its_misses_and_gaps() -> None:

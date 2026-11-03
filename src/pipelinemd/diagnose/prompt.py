@@ -13,8 +13,8 @@ from ..taxonomy import MODEL_CLASSES
 
 SYSTEM_PROMPT = """\
 You are a CI/CD failure analyst. You are given a distilled excerpt of a failed \
-GitLab CI job, plus the output of a deterministic rule engine that already \
-scanned it.
+CI job (GitLab CI or GitHub Actions; the job block says which), plus the output \
+of a deterministic rule engine that already scanned it.
 
 Your job is to name the single most likely root cause and give fixes someone \
 can act on.
@@ -34,8 +34,8 @@ it is an error - if the excerpt does not support a claim, do not make the \
 claim.
 - Prefer fixes specific to what you can see - the actual package name, the \
 actual command, the actual image - over generic advice.
-- A `patch` is a concrete snippet the user can paste (a .gitlab-ci.yml \
-fragment, a shell command, a config change). Include one only when you can be \
+- A `patch` is a concrete snippet the user can paste (a pipeline file \
+fragment for the job's CI, a shell command, a config change). Include one only when you can be \
 specific; otherwise leave it as an empty string.
 - If the excerpt genuinely does not explain the failure, say that plainly and \
 set confidence to "low". Do not invent a cause to fill the field.
@@ -127,8 +127,14 @@ DIAGNOSIS_SCHEMA: dict[str, object] = {
 }
 
 
-def _job_block(job: JobRef) -> str:
+#: What each log source is called in the prompt.
+CI_NAMES = {"gitlab": "GitLab CI", "github": "GitHub Actions"}
+
+
+def _job_block(job: JobRef, distilled: DistilledLog | None = None) -> str:
+    source = job.source if job.source in CI_NAMES else (distilled.source if distilled else None)
     rows = [
+        ("ci", CI_NAMES.get(source or "")),
         ("job", job.label),
         ("project", job.project),
         ("stage", job.stage),
@@ -152,7 +158,7 @@ def _environment_block(distilled: DistilledLog) -> str:
 
     failing = distilled.failing_section
     if failing:
-        lines.append(f"section still open when the job died: {failing.name}")
+        lines.append(f"section where the job died: {failing.name}")
     slow = sorted(
         (s for s in distilled.sections if s.duration_s),
         key=lambda s: -(s.duration_s or 0),
@@ -183,13 +189,14 @@ def build_user_message(
     hits: list[RuleHit],
     *,
     ci_config: str | None = None,
+    ci_config_path: str | None = None,
     max_rules: int = 5,
 ) -> str:
     """Assemble the single user turn describing the failure."""
     stats = distilled.stats
     sections = [
         "# Job",
-        _job_block(job),
+        _job_block(job, distilled),
         "",
         "# Environment",
         _environment_block(distilled) or "(nothing recorded)",
@@ -212,7 +219,7 @@ def build_user_message(
 
     if ci_config:
         trimmed = ci_config if len(ci_config) <= 8000 else ci_config[:8000] + "\n# … truncated"
-        sections += ["", "# .gitlab-ci.yml", "```yaml", trimmed, "```"]
+        sections += ["", f"# {ci_config_path or '.gitlab-ci.yml'}", "```yaml", trimmed, "```"]
 
     sections += [
         "",

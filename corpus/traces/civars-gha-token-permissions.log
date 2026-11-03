@@ -1,0 +1,126 @@
+﻿2026-10-28T14:05:03.1200000Z Current runner version: '2.336.0'
+2026-10-28T14:05:03.2570000Z ##[group]Runner Image Provisioner
+2026-10-28T14:05:03.3940000Z Hosted Compute Agent
+2026-10-28T14:05:03.5310000Z Version: 20261021.601
+2026-10-28T14:05:03.6680000Z Commit: 8c1d2f6a0e7b4c3d9a5f1e2b6c7d8e9f0a1b2c3d
+2026-10-28T14:05:03.8050000Z Build Date: 2026-10-20T22:14:03Z
+2026-10-28T14:05:03.9420000Z Worker ID: {7f4e2a1b-3c5d-4e6f-8a9b-0c1d2e3f4a5b}
+2026-10-28T14:05:04.0790000Z Azure Region: eastus2
+2026-10-28T14:05:04.2160000Z ##[endgroup]
+2026-10-28T14:05:04.3530000Z ##[group]Operating System
+2026-10-28T14:05:04.4900000Z Ubuntu
+2026-10-28T14:05:04.6270000Z 24.04.3
+2026-10-28T14:05:04.7640000Z LTS
+2026-10-28T14:05:04.9010000Z ##[endgroup]
+2026-10-28T14:05:05.0380000Z ##[group]Runner Image
+2026-10-28T14:05:05.1750000Z Image: ubuntu-24.04
+2026-10-28T14:05:05.3120000Z Version: 20261026.124.1
+2026-10-28T14:05:05.4490000Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20261026.124/images/ubuntu/Ubuntu2404-Readme.md
+2026-10-28T14:05:05.5860000Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20261026.124
+2026-10-28T14:05:05.7230000Z ##[endgroup]
+2026-10-28T14:05:05.8600000Z ##[group]GITHUB_TOKEN Permissions
+2026-10-28T14:05:05.9970000Z Contents: read
+2026-10-28T14:05:06.1340000Z Metadata: read
+2026-10-28T14:05:06.2710000Z ##[endgroup]
+2026-10-28T14:05:06.4080000Z Secret source: Actions
+2026-10-28T14:05:06.5450000Z Prepare workflow directory
+2026-10-28T14:05:06.6820000Z Prepare all required actions
+2026-10-28T14:05:06.8190000Z Getting action download info
+2026-10-28T14:05:06.9560000Z Download action repository 'actions/checkout@v5' (SHA:360258ac97fd2705d874420c91410b56df238c12)
+2026-10-28T14:05:07.0930000Z Download action repository 'actions/setup-node@v5' (SHA:fee3736c158c4cfd72d924dba307c59b0871d62d)
+2026-10-28T14:05:07.2300000Z Download action repository 'actions/github-script@v8' (SHA:808f0f6b30ffdcb12b0abaffe5918f4237b652bb)
+2026-10-28T14:05:07.3670000Z Complete job name: e2e-report
+2026-10-28T14:05:07.5040000Z ##[group]Run actions/checkout@v5
+2026-10-28T14:05:07.6410000Z with:
+2026-10-28T14:05:07.7780000Z   repository: acme/shop
+2026-10-28T14:05:07.9150000Z   token: ***
+2026-10-28T14:05:08.0520000Z   ssh-strict: true
+2026-10-28T14:05:08.1890000Z   ssh-user: git
+2026-10-28T14:05:08.3260000Z   persist-credentials: true
+2026-10-28T14:05:08.4630000Z   clean: true
+2026-10-28T14:05:08.6000000Z   fetch-depth: 1
+2026-10-28T14:05:08.7370000Z ##[endgroup]
+2026-10-28T14:05:08.8740000Z Syncing repository: acme/shop
+2026-10-28T14:05:09.0110000Z ##[group]Getting Git version info
+2026-10-28T14:05:09.1480000Z Working directory is '/home/runner/work/shop/shop'
+2026-10-28T14:05:09.2850000Z [command]/usr/bin/git version
+2026-10-28T14:05:09.4220000Z git version 2.51.1
+2026-10-28T14:05:09.5590000Z ##[endgroup]
+2026-10-28T14:05:09.6960000Z Deleting the contents of '/home/runner/work/shop/shop'
+2026-10-28T14:05:09.8330000Z ##[group]Fetching the repository
+2026-10-28T14:05:09.9700000Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +4f2a9c1e7b3d5f60a8c2e4b6d8f0a2c4e6b8d0f2:refs/remotes/origin/main
+2026-10-28T14:05:10.1070000Z ##[endgroup]
+2026-10-28T14:05:10.2440000Z ##[group]Checking out the ref
+2026-10-28T14:05:10.3810000Z [command]/usr/bin/git checkout --progress --force -B main refs/remotes/origin/main
+2026-10-28T14:05:10.5180000Z Switched to a new branch 'main'
+2026-10-28T14:05:10.6550000Z branch 'main' set up to track 'origin/main'.
+2026-10-28T14:05:10.7920000Z ##[endgroup]
+2026-10-28T14:05:10.9290000Z [command]/usr/bin/git log -1 --format=%H
+2026-10-28T14:05:11.0660000Z 4f2a9c1e7b3d5f60a8c2e4b6d8f0a2c4e6b8d0f2
+2026-10-28T14:05:11.2030000Z ##[group]Run actions/setup-node@v5
+2026-10-28T14:05:11.3400000Z with:
+2026-10-28T14:05:11.4770000Z   node-version: 22
+2026-10-28T14:05:11.6140000Z   cache: npm
+2026-10-28T14:05:11.7510000Z ##[endgroup]
+2026-10-28T14:05:11.8880000Z Found in cache @ /opt/hostedtoolcache/node/22.21.0/x64
+2026-10-28T14:05:12.0250000Z Environment details
+2026-10-28T14:05:12.1620000Z   node: v22.21.0
+2026-10-28T14:05:12.2990000Z   npm: 10.9.4
+2026-10-28T14:05:12.4360000Z   yarn: 1.22.22
+2026-10-28T14:05:12.5730000Z ##[group]Run npm ci && npx playwright test --reporter=json > report.json || true
+2026-10-28T14:05:12.7100000Z npm ci && npx playwright test --reporter=json > report.json || true
+2026-10-28T14:05:12.8470000Z shell: /usr/bin/bash -e {0}
+2026-10-28T14:05:12.9840000Z ##[endgroup]
+2026-10-28T14:05:13.1210000Z added 412 packages, and audited 413 packages in 9s
+2026-10-28T14:05:13.2580000Z found 0 vulnerabilities
+2026-10-28T14:05:13.3950000Z ##[group]Run actions/github-script@v8
+2026-10-28T14:05:13.5320000Z with:
+2026-10-28T14:05:13.6690000Z   script: const fs = require('fs');
+2026-10-28T14:05:13.8060000Z const report = JSON.parse(fs.readFileSync('report.json', 'utf8'));
+2026-10-28T14:05:13.9430000Z await github.rest.issues.createComment({
+2026-10-28T14:05:14.0800000Z   owner: context.repo.owner,
+2026-10-28T14:05:14.2170000Z   repo: context.repo.repo,
+2026-10-28T14:05:14.3540000Z   issue_number: context.issue.number,
+2026-10-28T14:05:14.4910000Z   body: `E2E: ${report.stats.expected} passed, ${report.stats.unexpected} failed`,
+2026-10-28T14:05:14.6280000Z });
+2026-10-28T14:05:14.7650000Z 
+2026-10-28T14:05:14.9020000Z   github-token: ***
+2026-10-28T14:05:15.0390000Z   debug: false
+2026-10-28T14:05:15.1760000Z   user-agent: actions/github-script
+2026-10-28T14:05:15.3130000Z   result-encoding: json
+2026-10-28T14:05:15.4500000Z   retries: 0
+2026-10-28T14:05:15.5870000Z   retry-exempt-status-codes: 400,401,403,404,422
+2026-10-28T14:05:15.7240000Z ##[endgroup]
+2026-10-28T14:05:15.8610000Z RequestError [HttpError]: Resource not accessible by integration
+2026-10-28T14:05:15.9980000Z     at /home/runner/work/_actions/actions/github-script/v8/dist/index.js:9537:21
+2026-10-28T14:05:16.1350000Z     at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+2026-10-28T14:05:16.2720000Z     at async eval (eval at callAsyncFunction (/home/runner/work/_actions/actions/github-script/v8/dist/index.js:36187:16), <anonymous>:4:1)
+2026-10-28T14:05:16.4090000Z     at async main (/home/runner/work/_actions/actions/github-script/v8/dist/index.js:36285:20) {
+2026-10-28T14:05:16.5460000Z   status: 403,
+2026-10-28T14:05:16.6830000Z   response: {
+2026-10-28T14:05:16.8200000Z     url: 'https://api.github.com/repos/acme/shop/issues/218/comments',
+2026-10-28T14:05:16.9570000Z     status: 403,
+2026-10-28T14:05:17.0940000Z     headers: {
+2026-10-28T14:05:17.2310000Z       'x-accepted-github-permissions': 'issues=write; pull_requests=write',
+2026-10-28T14:05:17.3680000Z       'x-github-api-version-selected': '2022-11-28',
+2026-10-28T14:05:17.5050000Z       'x-ratelimit-remaining': '4987',
+2026-10-28T14:05:17.6420000Z     },
+2026-10-28T14:05:17.7790000Z     data: {
+2026-10-28T14:05:17.9160000Z       message: 'Resource not accessible by integration',
+2026-10-28T14:05:18.0530000Z       documentation_url: 'https://docs.github.com/rest/issues/comments#create-an-issue-comment',
+2026-10-28T14:05:18.1900000Z       status: '403'
+2026-10-28T14:05:18.3270000Z     }
+2026-10-28T14:05:18.4640000Z   },
+2026-10-28T14:05:18.6010000Z }
+2026-10-28T14:05:18.7380000Z ##[error]Unhandled error: HttpError: Resource not accessible by integration
+2026-10-28T14:05:18.8750000Z Post job cleanup.
+2026-10-28T14:05:19.0120000Z [command]/usr/bin/git version
+2026-10-28T14:05:19.1490000Z git version 2.51.1
+2026-10-28T14:05:19.2860000Z Temporarily overriding HOME='/home/runner/work/_temp/0b6e2f4a-1c3d-4e5f-a6b7-c8d9e0f1a2b3' before making global git config changes
+2026-10-28T14:05:19.4230000Z Adding repository directory to the temporary git global config as a safe directory
+2026-10-28T14:05:19.5600000Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/shop/shop
+2026-10-28T14:05:19.6970000Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-10-28T14:05:19.8340000Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-10-28T14:05:19.9710000Z http.https://github.com/.extraheader
+2026-10-28T14:05:20.1080000Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-10-28T14:05:20.2450000Z Cleaning up orphan processes

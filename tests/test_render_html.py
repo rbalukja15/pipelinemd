@@ -332,13 +332,17 @@ def test_the_timeline_flags_the_section_that_failed(report: Report) -> None:
     assert "74s" in timeline
 
 
-def test_a_github_log_has_no_timeline_of_one_untimed_step(
-    trace: Callable[[str], str],
-) -> None:
+def test_a_github_log_has_a_timeline_of_its_steps(trace: Callable[[str], str]) -> None:
     distilled = distill(trace("github/pytest_service_container"))
-    assert distilled.sections, "the post-job span exists, untimed"
     page = render_html([Report(job=JobRef(name="x"), distilled=distilled)])
-    assert "<h2>Timeline</h2>" not in page
+    timeline = page.split("<h2>Timeline</h2>", 1)[1].split("</ol>", 1)[0]
+    names = re.findall(r'<span class="name">([^<]+)</span>', timeline)
+    assert names[0] == "Set up job" and "Run python -m pytest -ra" in names
+    failed = re.search(r'<li class="step failed"><span class="name">([^<]+)<', timeline)
+    assert failed and failed.group(1) == "Run python -m pytest -ra"
+    # A failed step finished; only a section left open "never finished".
+    assert "never finished" not in timeline
+    assert '<li class="step after"><span class="name">post_job' in timeline
 
 
 def test_no_sections_no_timeline() -> None:

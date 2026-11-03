@@ -1,0 +1,85 @@
+# Diagnose a workflow run when one of its jobs fails.
+#
+# Two ways to wire it in. Use one.
+#
+# 1. A last job in the same workflow. Add it under `jobs:` and list every job
+#    it should watch in `needs:`. It runs only when one of them failed.
+#
+# 2. A separate workflow (this whole file, as .github/workflows/pipelinemd.yml)
+#    that runs after the named workflow completes. It needs no change to that
+#    workflow, and it also covers runs from pull requests.
+#
+# Set ANTHROPIC_API_KEY as a repository secret to enable the diagnosis layer.
+# Without it the job still runs and reports the rule findings. GitHub serves
+# job logs only to an authenticated caller, so GITHUB_TOKEN is passed in and
+# granted `actions: read`.
+#
+# pipelinemd is installed from PyPI on the hosted runner rather than run from
+# the ghcr.io image: a `container:` job runs as the image's non-root user, which
+# cannot write to $GITHUB_STEP_SUMMARY. (The image works with
+# `options: --user root` if you prefer it.)
+
+name: pipelinemd
+
+on:
+  workflow_run:
+    workflows: [CI]  # the workflow to watch, by its `name:`
+    types: [completed]
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  # -- 2. after another workflow ----------------------------------------------
+  diagnose:
+    if: github.event.workflow_run.conclusion == 'failure'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - run: pip install 'pipelinemd[llm]'
+      - name: Diagnose the failed run
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+        # The run URL is passed through the environment, not interpolated into
+        # the script, so nothing in it is ever executed.
+        run: |
+          pipelinemd diagnose "$RUN_URL" -o diagnosis.md -o diagnosis.html
+          cat diagnosis.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: pipelinemd-diagnosis
+          path: diagnosis.*
+
+# -- 1. as the last job of the workflow it watches ---------------------------------
+#
+# Paste this under the watched workflow's `jobs:` and drop the `on:` and
+# `jobs:` above. Inside Actions pipelinemd reads GITHUB_REPOSITORY,
+# GITHUB_RUN_ID and GITHUB_RUN_ATTEMPT itself, so it needs no target.
+#
+#  pipelinemd:
+#    needs: [build, test]  # every job it should watch
+#    if: failure()
+#    runs-on: ubuntu-latest
+#    timeout-minutes: 10
+#    permissions:
+#      actions: read
+#      contents: read
+#    steps:
+#      - uses: actions/setup-python@v6
+#        with:
+#          python-version: "3.13"
+#      - run: pip install 'pipelinemd[llm]'
+#      - name: Diagnose this run
+#        env:
+#          GITHUB_TOKEN: ${{ github.token }}
+#          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+#        run: |
+#          pipelinemd diagnose --all-jobs -o diagnosis.md
+#          cat diagnosis.md >> "$GITHUB_STEP_SUMMARY"

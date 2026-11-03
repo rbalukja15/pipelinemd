@@ -209,7 +209,7 @@ def test_github_post_job_steps_are_read_as_one_section(trace: Callable[[str], st
     """Everything GitHub runs after its verdict is fallout, like after_script."""
     cleaned = clean_trace(trace("github/pytest_service_container"))
     verdict = next(line for line in cleaned.lines if line.text == GITHUB_VERDICT)
-    assert verdict.section is None
+    assert verdict.section == "Run python -m pytest -ra"
     after = [line for line in cleaned.lines if line.number > verdict.number]
     assert after
     assert all(line.section == POST_JOB_SECTION for line in after)

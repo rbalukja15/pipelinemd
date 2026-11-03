@@ -356,11 +356,20 @@ def format_report(report: EvalReport) -> str:
                 f"  {miss.case.id:<{width}} {miss.case.evidence_marker!r} is not in the excerpt"
             )
 
-    if all(r.case.provenance == "authored" for r in report.results):
+    authored = sum(1 for r in report.results if r.case.provenance == "authored")
+    if authored == len(report.results):
         lines += [
             "",
             "Every case is authored, not observed. These numbers are a regression",
             "signal, not a measurement of real-world accuracy — see corpus/README.md.",
+        ]
+    elif authored:
+        lines += [
+            "",
+            f"{authored} of {len(report.results)} cases are authored, not observed. These "
+            "numbers are",
+            "mostly a regression signal, not a measurement of real-world accuracy — see",
+            "corpus/README.md.",
         ]
     return "\n".join(lines) + "\n"
 

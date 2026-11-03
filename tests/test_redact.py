@@ -9,6 +9,8 @@ from pipelinemd.distill.redact import MASK, redact, redact_lines, redaction_patt
 from .fixtures.secrets import (
     AWS_KEY_ID,
     AWS_TEMP_KEY_ID,
+    GITHUB_PAT,
+    GITHUB_TOKEN,
     GITLAB_PAT_LONG,
     GITLAB_PAT_PLAIN,
     GITLAB_RUNNER_TOKEN,
@@ -23,6 +25,8 @@ from .fixtures.secrets import (
     [
         (f"token={GITLAB_PAT_LONG}", GITLAB_PAT_LONG),
         (f"runner {GITLAB_RUNNER_TOKEN} registered", GITLAB_RUNNER_TOKEN),
+        (f"GH_TOKEN {GITHUB_TOKEN} set", GITHUB_TOKEN),
+        (f"pushing with {GITHUB_PAT}", GITHUB_PAT),
         (f"AWS_ACCESS_KEY_ID={AWS_KEY_ID}", AWS_KEY_ID),
         (f"temp creds {AWS_TEMP_KEY_ID} here", AWS_TEMP_KEY_ID),
         (f"slack {SLACK_TOKEN}", SLACK_TOKEN),

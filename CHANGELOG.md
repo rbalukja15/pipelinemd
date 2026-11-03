@@ -36,6 +36,18 @@ How a section becomes a release is in [docs/releasing.md](docs/releasing.md).
   existing branch or merges. Without the flag nothing is written
   ([#24](https://github.com/rbalukja15/pipelinemd/issues/24),
   [#25](https://github.com/rbalukja15/pipelinemd/issues/25)).
+- `pipelinemd diagnose` takes GitHub Actions too: a run URL (its failed jobs,
+  or one `/attempts/<n>`), a job URL, `--repo` with `--run` or `--job`, or no
+  target inside Actions. The report has GitLab's shape, and a job that passed
+  on a re-run of the same run is classified `flaky`. GitHub needs a token even
+  for public logs (`$GH_TOKEN` or `$GITHUB_TOKEN`, kept to its own instance);
+  `--github-url` covers GitHub Enterprise Server. GitHub logs are read into
+  steps with durations and a failing step, five GitHub rules join the catalog
+  (token permissions, a missing action input, timeouts, cancelled runs, PyPI
+  trusted publishing), `gitlab.token-denied` no longer fires on GitHub logs,
+  and seven GitHub Actions cases join the corpus, one of them observed.
+  `examples/github-actions-diagnose.yml` is a ready-made workflow
+  ([#50](https://github.com/rbalukja15/pipelinemd/issues/50)).
 - `AGENTS.md` at the repository root sets out how changes are made: the
   Makefile targets, commit, branch and changelog conventions, the per-issue
   workflow, and the product rules with the code that enforces each
