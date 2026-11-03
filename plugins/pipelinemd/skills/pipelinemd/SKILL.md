@@ -1,6 +1,6 @@
 ---
 name: pipelinemd
-description: Diagnose why a CI job failed. Use when the user shares a failed GitLab job or pipeline URL, a CI log file, or asks why their pipeline, build or CI job is red. Runs pipelinemd to distil the log and match known failure signatures, then explains the root cause and fixes it in the repository.
+description: Diagnose why a CI job failed. Use when the user shares a failed GitLab job or pipeline URL, a failed GitHub Actions run or job URL, a CI log file, or asks why their pipeline, build or CI job is red. Runs pipelinemd to distil the log and match known failure signatures, then explains the root cause and fixes it in the repository.
 allowed-tools: Bash(uvx pipelinemd*), Bash(pipelinemd *), Bash(pipx run pipelinemd*), Bash(gh run view*)
 ---
 
@@ -18,7 +18,9 @@ root cause, then fix it in the user's code when the fix belongs there.
 | A GitLab job URL (`…/-/jobs/<id>`) | `uvx pipelinemd diagnose <url> --no-llm --format markdown` |
 | A GitLab pipeline URL (`…/-/pipelines/<id>`) | `uvx pipelinemd diagnose <url> --no-llm --format markdown` (add `--all-jobs` if several jobs failed and they want all of them) |
 | A log file on disk | `uvx pipelinemd distill <path> --format markdown` |
-| A GitHub Actions run | `gh run view <run-id> --log-failed > failed.log`, then `distill` that file |
+| A GitHub Actions run URL (`…/actions/runs/<id>`) | `uvx pipelinemd diagnose <url> --no-llm --format markdown` (add `--all-jobs` for every failed job) |
+| A GitHub Actions job URL (`…/actions/runs/<id>/job/<id>`) | `uvx pipelinemd diagnose <url> --no-llm --format markdown` |
+| A GitHub Actions run with no token available | `gh run view <run-id> --log-failed > failed.log`, then `distill` that file |
 | A log pasted into the chat | Save it to a file, then `distill` it |
 
 Always pass `--no-llm` to `diagnose`. You are the diagnosis layer here, so the
@@ -31,8 +33,15 @@ Do not install anything without asking the user.
 
 Private GitLab projects need a token in `GITLAB_TOKEN` (or `PIPELINEMD_TOKEN`).
 For a self-hosted GitLab instance, the URL is enough; `--gitlab-url` is only
-needed with `--project`/`--pipeline`/`--job`. Never print a token or ask the
-user to paste one into the chat; ask them to export it in their shell.
+needed with `--project`/`--pipeline`/`--job`.
+
+GitHub serves job logs only with a token, even for public repositories. It is
+read from `GH_TOKEN` or `GITHUB_TOKEN`; if the user has the GitHub CLI, they can
+run `export GH_TOKEN=$(gh auth token)`. For GitHub Enterprise Server, set
+`--github-url` or `PIPELINEMD_GITHUB_URL`.
+
+Never print a token or ask the user to paste one into the chat; ask them to
+export it in their shell.
 
 Use `--format json` instead of `markdown` only when you need exact fields, for
 example the `rule_hits[].fixes` list or `classification.failure_class`.
@@ -50,8 +59,8 @@ The markdown report has, in order:
 - **Evidence** — the distilled log lines, with their original line numbers.
   `[xN]` means a line repeated N times.
 
-Exit codes: `0` a report was produced; `2` bad URL or argument; `3` GitLab was
-unreachable, the token was refused or the job was not found; `4` the pipeline
+Exit codes: `0` a report was produced; `2` bad URL or argument; `3` GitLab or
+GitHub was unreachable, the token was refused or the job was not found; `4` the pipeline
 has no failed jobs.
 
 ## 3. Answer the user
@@ -71,7 +80,7 @@ has no failed jobs.
 
 ## Limits
 
-- `diagnose` only fetches from GitLab. For GitHub Actions and other CI systems,
+- `diagnose` fetches from GitLab and GitHub Actions. For other CI systems,
   download the log and use `distill`.
 - pipelinemd masks credential-shaped strings in its output, but it is not a
   guarantee. Do not paste raw logs into places outside the user's machine.
