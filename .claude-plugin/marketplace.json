@@ -11,7 +11,7 @@
     {
       "name": "pipelinemd",
       "source": "./plugins/pipelinemd",
-      "description": "Find out why a GitLab CI job or CI log failed: distils the log, matches known failure signatures, and hands the evidence to Claude to explain and fix.",
+      "description": "Find out why a GitLab CI or GitHub Actions job, or any CI log, failed: distils the log, matches known failure signatures, and hands the evidence to Claude to explain and fix.",
       "category": "development",
       "keywords": ["ci", "gitlab", "github-actions", "pipeline", "logs", "debugging"]
     }

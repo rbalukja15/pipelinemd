@@ -8,6 +8,8 @@ How a section becomes a release is in [docs/releasing.md](docs/releasing.md).
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-03
+
 ### Added
 
 - The README opens with a short recording of `pipelinemd diagnose --no-llm`
@@ -57,6 +59,9 @@ How a section becomes a release is in [docs/releasing.md](docs/releasing.md).
 
 - `pipelinemd eval -o` can be given twice to write the text and JSON results
   of one run, each chosen by the file's extension.
+- The Claude Code plugin's skill runs `diagnose` on GitHub Actions run and job
+  URLs too, and its description names GitHub Actions. Installed copies pick
+  this up with the plugin's 1.0.0 version.
 
 ## [0.2.0] - 2026-10-06
 
@@ -191,7 +196,8 @@ The first release.
   GitLab CI job can diagnose a failed pipeline without a pip install, and a
   release workflow that publishes it and the PyPI package as one version.
 
-[Unreleased]: https://github.com/rbalukja15/pipelinemd/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/rbalukja15/pipelinemd/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/rbalukja15/pipelinemd/compare/v0.2.0...v1.0.0
 [0.2.0]: https://github.com/rbalukja15/pipelinemd/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/rbalukja15/pipelinemd/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/rbalukja15/pipelinemd/compare/v0.1.0...v0.1.1

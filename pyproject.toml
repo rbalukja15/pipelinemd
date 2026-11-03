@@ -15,7 +15,7 @@ requires-python = ">=3.11"
 authors = [{ name = "rbalukja15" }]
 keywords = ["gitlab", "ci", "cd", "pipeline", "logs", "diagnostics", "claude"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 5 - Production/Stable",
     "Environment :: Console",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
