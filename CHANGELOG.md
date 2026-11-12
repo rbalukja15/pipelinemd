@@ -8,13 +8,16 @@ How a section becomes a release is in [docs/releasing.md](docs/releasing.md).
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-12
+
 ### Added
 
 - The Claude Code plugin diagnoses a CI run Claude was watching as soon as it
   fails. The skill's description now covers runs, pipelines and pull request
   checks Claude was waiting on, and a new plugin hook catches a failed
   `gh run watch`, `gh pr checks`, `gh run view --exit-status` or
-  `glab ci status` and passes the failed run's URL to the skill.
+  `glab ci status` and passes the failed run's URL to the skill
+  ([#74](https://github.com/rbalukja15/pipelinemd/pull/74)).
 - `docs/case-study.md`, a write-up of how pipelinemd works and how it is
   measured, linked from the README under the demo
   ([#27](https://github.com/rbalukja15/pipelinemd/issues/27)).
@@ -207,7 +210,8 @@ The first release.
   GitLab CI job can diagnose a failed pipeline without a pip install, and a
   release workflow that publishes it and the PyPI package as one version.
 
-[Unreleased]: https://github.com/rbalukja15/pipelinemd/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/rbalukja15/pipelinemd/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/rbalukja15/pipelinemd/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/rbalukja15/pipelinemd/compare/v0.2.0...v1.0.0
 [0.2.0]: https://github.com/rbalukja15/pipelinemd/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/rbalukja15/pipelinemd/compare/v0.1.1...v0.1.2
