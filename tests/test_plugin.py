@@ -11,6 +11,8 @@ import argparse
 import json
 import re
 import struct
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -108,3 +110,108 @@ def test_skill_commands_parse(command: str) -> None:
     assert flags or subcommand == "distill"
     for flag in flags:
         assert flag in known, f"{flag} is not a `pipelinemd {subcommand}` option"
+
+
+HOOKS = _plugin_dir() / "hooks" / "hooks.json"
+WATCH_HOOK = _plugin_dir() / "hooks" / "watch_failed.py"
+RUN_URL = "https://github.com/acme/app/actions/runs/123/job/456"
+
+
+def _hook_events() -> dict[str, list[dict[str, object]]]:
+    data = json.loads(HOOKS.read_text(encoding="utf-8"))
+    # Claude Code ignores a hooks file without the top-level "hooks" wrapper.
+    events: dict[str, list[dict[str, object]]] = data["hooks"]
+    return events
+
+
+def _run_hook(event: dict[str, object]) -> str:
+    result = subprocess.run(
+        [sys.executable, str(WATCH_HOOK)],
+        input=json.dumps(event),
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=10,
+    )
+    return result.stdout
+
+
+def _bash_event(command: str, stdout: str = "", error: str | None = None) -> dict[str, object]:
+    event: dict[str, object] = {
+        "hook_event_name": "PostToolUseFailure" if error else "PostToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": command},
+    }
+    if error:
+        event["error"] = error
+    else:
+        event["tool_response"] = {"stdout": stdout, "stderr": "", "interrupted": False}
+    return event
+
+
+def test_hooks_run_the_bundled_script_after_bash() -> None:
+    events = _hook_events()
+
+    # A failing command fires PostToolUseFailure, not PostToolUse, so both are needed.
+    assert set(events) == {"PostToolUse", "PostToolUseFailure"}
+    for groups in events.values():
+        (group,) = groups
+        assert group["matcher"] == "Bash"
+        (handler,) = group["hooks"]  # type: ignore[misc]  # JSON, checked by the unpack
+        assert "${CLAUDE_PLUGIN_ROOT}/hooks/watch_failed.py" in handler["command"]
+    assert WATCH_HOOK.is_file()
+
+
+@pytest.mark.parametrize(
+    "event",
+    [
+        _bash_event(
+            "gh run watch 123 --exit-status",
+            error=f"Exit code 1\nX main CI · 123\nRun CI (123) completed with 'failure'\n{RUN_URL}",
+        ),
+        _bash_event(
+            "gh pr checks 42 --watch",
+            error=f"Exit code 1\nSome checks were not successful\ntest\tfail\t1m\t{RUN_URL}",
+        ),
+        _bash_event(
+            "gh run watch 123", stdout=f"X Run CI (123) completed with 'failure'\n{RUN_URL}"
+        ),
+    ],
+)
+def test_watch_hook_names_the_failed_run(event: dict[str, object]) -> None:
+    output = json.loads(_run_hook(event))["hookSpecificOutput"]
+
+    assert output["hookEventName"] == event["hook_event_name"]
+    assert "pipelinemd skill" in output["additionalContext"]
+    assert RUN_URL in output["additionalContext"]
+
+
+@pytest.mark.parametrize(
+    "event",
+    [
+        # Green: the summary still counts "0 failing".
+        _bash_event(
+            "gh pr checks --watch",
+            stdout="All checks were successful\n0 cancelled, 0 failing, 5 successful",
+        ),
+        # Still pending: gh pr checks exits 8.
+        _bash_event("gh pr checks", error="Exit code 8\nbuild\tpending\t0\tlink"),
+        # Not a watch command, even though it failed.
+        _bash_event("pytest", error="Exit code 1\n1 failed, 3 passed"),
+        # The skill reading a log is not a watch.
+        _bash_event("gh run view 123 --log-failed", stdout="FAILED tests/test_x.py"),
+        # Already diagnosing.
+        _bash_event("gh run watch 1 && uvx pipelinemd diagnose x", error="Exit code 1\nfailed"),
+        {"hook_event_name": "PostToolUse", "tool_name": "Write", "tool_input": {}},
+    ],
+)
+def test_watch_hook_stays_quiet(event: dict[str, object]) -> None:
+    assert _run_hook(event) == ""
+
+
+def test_watch_hook_ignores_input_it_cannot_read() -> None:
+    result = subprocess.run(
+        [sys.executable, str(WATCH_HOOK)], input="not json", capture_output=True, text=True
+    )
+
+    assert result.returncode == 0 and result.stdout == ""

@@ -1,6 +1,6 @@
 ---
 name: pipelinemd
-description: Diagnose why a CI job failed. Use when the user shares a failed GitLab job or pipeline URL, a failed GitHub Actions run or job URL, a CI log file, or asks why their pipeline, build or CI job is red. Runs pipelinemd to distil the log and match known failure signatures, then explains the root cause and fixes it in the repository.
+description: Diagnose why a CI job failed. Use when the user shares a failed GitLab job or pipeline URL, a failed GitHub Actions run or job URL, a CI log file, or asks why their pipeline, build or CI job is red. Also use it on your own, without being asked, whenever a CI run, pipeline or pull request check you are watching or waiting on finishes failed. Runs pipelinemd to distil the log and match known failure signatures, then explains the root cause and fixes it in the repository.
 allowed-tools: Bash(uvx pipelinemd*), Bash(pipelinemd *), Bash(pipx run pipelinemd*), Bash(gh run view*)
 ---
 
@@ -45,6 +45,15 @@ export it in their shell.
 
 Use `--format json` instead of `markdown` only when you need exact fields, for
 example the `rule_hits[].fixes` list or `classification.failure_class`.
+
+### When a run you were watching fails
+
+If you were watching a run (`gh run watch`, `gh pr checks --watch`,
+`glab ci status`, or a pull request's checks) and it failed, diagnose it before
+anything else, even if the user only asked you to wait for CI. Take the run or
+job URL from the watch output, or build it from the run id, and run the
+matching command from the table above. The plugin's hook adds a reminder after
+a failed watch command; follow it the same way.
 
 ## 2. Read the report
 

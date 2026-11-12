@@ -1,0 +1,29 @@
+{
+  "description": "Point Claude at the pipelinemd skill when a CI run it was watching fails.",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/watch_failed.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/watch_failed.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
