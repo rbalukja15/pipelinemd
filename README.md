@@ -334,7 +334,10 @@ check it was waiting on that finished failed. A hook in the plugin makes that
 certain for shell watches: when `gh run watch`, `gh pr checks`,
 `gh run view --exit-status` or `glab ci status` reports a failure, it hands
 Claude the failed run's URL and points it at the skill. The hook only reads the
-command's output. It runs nothing itself and needs `python3`. A watch started in
+command's output. It runs nothing itself and needs `python3`. It passes on
+links only to github.com, gitlab.com, the hosts in `GH_HOST`, `GITLAB_HOST` or
+pipelinemd's own URL settings, and hosts named in the watch command, so a
+third-party check's link can't steer it elsewhere. A watch started in
 the background finishes outside any tool call, so there the description does
 the work alone.
 

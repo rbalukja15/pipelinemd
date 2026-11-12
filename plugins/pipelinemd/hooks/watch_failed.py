@@ -13,6 +13,7 @@ Standard library only, so it runs on any python3 without the package installed.
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
 from typing import Any
@@ -28,9 +29,26 @@ WATCH = re.compile(
 FAILED = re.compile(r"\b(?:fail|failed|failure|failing)\b|(?-i:^\s*X\s)", re.I | re.M)
 # Summaries count every outcome, so a green run still says "0 failing".
 NONE_FAILED = re.compile(r"\b0\s+(?:fail|failed|failures?|failing)\b", re.I)
-URL = re.compile(
-    r"https://[^\s'\"<>)]+?/(?:actions/runs/\d+(?:/job/\d+)?|-/(?:pipelines|jobs)/\d+)"
+# After a clean exit the loose match above would trip on a green job named
+# `fail-fast`, so only the CLIs' own failure lines count there.
+FAILED_STRICT = re.compile(
+    r"completed with 'failure'"
+    r"|\b[1-9]\d*\s+(?:failing|failed)\b"
+    r"|\tfail\t"
+    r"|\(failed\)"
+    r"|Pipeline State:\s*failed",
+    re.I,
 )
+URL = re.compile(
+    r"https://([^\s/'\"<>)]+)[^\s'\"<>)]*?"
+    r"/(?:actions/runs/\d+(?:/job/\d+)?|-/(?:pipelines|jobs)/\d+)"
+)
+# Check links in `gh pr checks` come from whoever runs the check, and the skill
+# fetches whatever URL it is given with the user's token. So pass on only hosts
+# the user already works with: the public forges, the ones their CLIs are set
+# to, and any named in the watch command itself.
+KNOWN_HOSTS = frozenset({"github.com", "gitlab.com"})
+HOST_VARS = ("GH_HOST", "GITLAB_HOST", "PIPELINEMD_GITHUB_URL", "PIPELINEMD_GITLAB_URL")
 # `gh pr checks` exits 8 while checks are still pending, which is not a failure.
 PENDING = re.compile(r"^Exit code 8\b")
 MAX_URLS = 5
@@ -46,15 +64,27 @@ def _text(event: dict[str, Any]) -> str:
     return NONE_FAILED.sub("", "\n".join(parts))
 
 
-def _failed_urls(text: str) -> list[str]:
-    """URLs on lines that report a failure first, then any others, without repeats."""
+def _host(value: str) -> str:
+    return value.split("://", 1)[-1].split("/", 1)[0].lower()
+
+
+def _trusted_hosts(command: str) -> set[str]:
+    hosts = set(KNOWN_HOSTS)
+    hosts.update(_host(os.environ[var]) for var in HOST_VARS if os.environ.get(var))
+    hosts.update(match.group(1).lower() for match in URL.finditer(command))
+    return hosts
+
+
+def _failed_urls(text: str, trusted: set[str]) -> list[str]:
+    """Trusted URLs on lines that report a failure first, then any others, without repeats."""
     lines = text.splitlines()
     ranked = [line for line in lines if FAILED.search(line)]
     ranked += [line for line in lines if not FAILED.search(line)]
     urls: list[str] = []
     for line in ranked:
-        for url in URL.findall(line):
-            if url not in urls:
+        for match in URL.finditer(line):
+            url = match.group(0)
+            if match.group(1).lower() in trusted and url not in urls:
                 urls.append(url)
     return urls[:MAX_URLS]
 
@@ -66,13 +96,14 @@ def context_for(event: dict[str, Any]) -> str | None:
     command = str((event.get("tool_input") or {}).get("command") or "")
     if not WATCH.search(command) or "pipelinemd" in command:
         return None
-    if PENDING.match(str(event.get("error") or "")):
+    error = str(event.get("error") or "")
+    if PENDING.match(error):
         return None
     text = _text(event)
-    if not FAILED.search(text):
+    if not (FAILED if error else FAILED_STRICT).search(text):
         return None
 
-    urls = _failed_urls(text)
+    urls = _failed_urls(text, _trusted_hosts(command))
     where = (
         "Failed runs or jobs: " + ", ".join(urls) + "."
         if urls

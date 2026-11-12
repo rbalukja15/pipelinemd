@@ -196,6 +196,11 @@ def test_watch_hook_names_the_failed_run(event: dict[str, object]) -> None:
         ),
         # Still pending: gh pr checks exits 8.
         _bash_event("gh pr checks", error="Exit code 8\nbuild\tpending\t0\tlink"),
+        # Green, with a job whose name says "fail".
+        _bash_event(
+            "gh run watch 123",
+            stdout=f"✓ fail-fast in 1m\nRun CI (123) completed with 'success'\n{RUN_URL}",
+        ),
         # Not a watch command, even though it failed.
         _bash_event("pytest", error="Exit code 1\n1 failed, 3 passed"),
         # The skill reading a log is not a watch.
@@ -215,3 +220,49 @@ def test_watch_hook_ignores_input_it_cannot_read() -> None:
     )
 
     assert result.returncode == 0 and result.stdout == ""
+
+
+def _context(event: dict[str, object]) -> str:
+    output = json.loads(_run_hook(event))
+    context: str = output["hookSpecificOutput"]["additionalContext"]
+    return context
+
+
+def test_watch_hook_lists_failed_jobs_first() -> None:
+    passed = "https://github.com/acme/app/actions/runs/123/job/1"
+    failed = "https://github.com/acme/app/actions/runs/123/job/2"
+    event = _bash_event(
+        "gh pr checks 42",
+        error=f"Exit code 1\nlint\tpass\t1m\t{passed}\ntest\tfail\t2m\t{failed}",
+    )
+
+    context = _context(event)
+
+    assert context.index(failed) < context.index(passed)
+
+
+def test_watch_hook_reads_a_plain_string_response() -> None:
+    event = _bash_event("gh run watch 123")
+    event["tool_response"] = f"Run CI (123) completed with 'failure'\n{RUN_URL}"
+
+    assert RUN_URL in _context(event)
+
+
+def test_watch_hook_drops_links_to_unknown_hosts() -> None:
+    # Third-party checks choose their own links; the skill would fetch them with the user's token.
+    rogue = "https://evil.example/x/actions/runs/1"
+    event = _bash_event(
+        "gh pr checks 42",
+        error=f"Exit code 1\nscan\tfail\t1m\t{rogue}\ntest\tfail\t2m\t{RUN_URL}",
+    )
+
+    context = _context(event)
+
+    assert rogue not in context and RUN_URL in context
+
+
+def test_watch_hook_keeps_the_host_the_command_names() -> None:
+    url = "https://gitlab.acme.dev/team/app/-/pipelines/9"
+    event = _bash_event(f"glab ci status --web=false {url}", error=f"Exit code 1\n(failed) {url}")
+
+    assert url in _context(event)
