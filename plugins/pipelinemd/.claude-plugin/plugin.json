@@ -1,6 +1,6 @@
 {
   "name": "pipelinemd",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Find out why a GitLab CI or GitHub Actions job, or any CI log, failed: distils the log, matches known failure signatures, and hands the evidence to Claude to explain and fix.",
   "author": {
     "name": "rbalukja15",
