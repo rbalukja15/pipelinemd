@@ -328,6 +328,19 @@ then fixes the cause in your repository. The rules-only run needs no API key;
 set `GITLAB_TOKEN` for private projects. It needs [uv](https://docs.astral.sh/uv/);
 the skill falls back to an installed `pipelinemd`, `pipx` or the image.
 
+It also runs without being asked when a CI run Claude is watching fails. The
+skill's description tells Claude to diagnose any run, pipeline or pull request
+check it was waiting on that finished failed. A hook in the plugin makes that
+certain for shell watches: when `gh run watch`, `gh pr checks`,
+`gh run view --exit-status` or `glab ci status` reports a failure, it hands
+Claude the failed run's URL and points it at the skill. The hook only reads the
+command's output. It runs nothing itself and needs `python3`. It passes on
+links only to github.com, gitlab.com, the hosts in `GH_HOST`, `GITLAB_HOST` or
+pipelinemd's own URL settings, and hosts named in the watch command, so a
+third-party check's link can't steer it elsewhere. A watch started in
+the background finishes outside any tool call, so there the description does
+the work alone.
+
 The skill lives in [`plugins/pipelinemd/`](https://github.com/rbalukja15/pipelinemd/tree/main/plugins/pipelinemd).
 
 ## Output formats

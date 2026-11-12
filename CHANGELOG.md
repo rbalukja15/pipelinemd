@@ -10,6 +10,11 @@ How a section becomes a release is in [docs/releasing.md](docs/releasing.md).
 
 ### Added
 
+- The Claude Code plugin diagnoses a CI run Claude was watching as soon as it
+  fails. The skill's description now covers runs, pipelines and pull request
+  checks Claude was waiting on, and a new plugin hook catches a failed
+  `gh run watch`, `gh pr checks`, `gh run view --exit-status` or
+  `glab ci status` and passes the failed run's URL to the skill.
 - `docs/case-study.md`, a write-up of how pipelinemd works and how it is
   measured, linked from the README under the demo
   ([#27](https://github.com/rbalukja15/pipelinemd/issues/27)).
